@@ -127,6 +127,7 @@ jobs:
       fail-fast: false
       matrix:
         ghc-ver:
+        - 9.14.1
         - 9.12.4
         - 9.10.3
         - 9.8.4
