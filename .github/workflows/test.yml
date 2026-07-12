@@ -94,6 +94,7 @@ jobs:
           steps.setup-haskell.outputs.stack-version }}-icu-${{ env.ICU_VER }}-plan-${{
           hashFiles('Agda.cabal','stack.yaml','deps.txt') }}
         path: ${{ steps.setup-haskell.outputs.stack-root }}
+        retention-days: 30
   cubical:
     needs: build
     runs-on: ubuntu-24.04

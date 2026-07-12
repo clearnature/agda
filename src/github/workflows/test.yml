@@ -204,6 +204,7 @@ jobs:
       with:
         key:  *cache_key
         path: *cache_path
+        retention-days: 30
 
   # Step 2a: Basic testsuites: succeed, fail, etc.
   ###########################################################################
