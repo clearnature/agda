@@ -39,7 +39,7 @@ on:
     - '!README.md'
     - '!fix-whitespace.yaml'
     - '!hie*.yaml'
-    - '!stack-*.yaml'
+    - '!config/stack-*.yaml'
     - '!touchup.sh'
     - '!CITATION.cff'
 
@@ -131,7 +131,7 @@ jobs:
 
     # The Makefile tests whether stack.yaml is present to decide on stack vs. cabal build.
     - name: "Copy stack-${{ env.GHC_VER}}.yaml to stack.yaml"
-      run:  cp stack-${{ env.GHC_VER }}.yaml stack.yaml
+      run:  cp config/stack-${{ env.GHC_VER }}.yaml stack.yaml
 
     # Update the package index.
     # Issue #8211: do this as explicit step so that the following one will not bear its costs.
@@ -320,8 +320,6 @@ jobs:
       # 6m  3s (2022-06-17)
 
     - name: "Standard library compiler tests"
-      env:
-        GHCRTS: -M6G
       run: make std-lib-compiler-test
 
     - name: "Successful tests using the standard library"

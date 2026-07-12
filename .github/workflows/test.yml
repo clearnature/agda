@@ -47,7 +47,7 @@ jobs:
         echo "stack-root=$(stack path --stack-root)" >> "${GITHUB_OUTPUT}"
         echo "STACK_ROOT=$(stack path --stack-root)" >> "${GITHUB_ENV}"
     - name: Copy stack-${{ env.GHC_VER}}.yaml to stack.yaml
-      run: cp stack-${{ env.GHC_VER }}.yaml stack.yaml
+      run: cp config/stack-${{ env.GHC_VER }}.yaml stack.yaml
     - name: Update package index
       run: |
         ${STACK} update
@@ -203,9 +203,7 @@ jobs:
       run: |
         make benchmark-without-logs
         make benchmark-summary
-    - env:
-        GHCRTS: -M6G
-      name: Standard library compiler tests
+    - name: Standard library compiler tests
       run: make std-lib-compiler-test
     - name: Successful tests using the standard library
       run: make std-lib-succeed
@@ -284,7 +282,7 @@ name: Build, Test, and Benchmark
     - '!README.md'
     - '!fix-whitespace.yaml'
     - '!hie*.yaml'
-    - '!stack-*.yaml'
+    - '!config/stack-*.yaml'
     - '!touchup.sh'
     - '!CITATION.cff'
   push:
@@ -318,7 +316,7 @@ name: Build, Test, and Benchmark
     - '!README.md'
     - '!fix-whitespace.yaml'
     - '!hie*.yaml'
-    - '!stack-*.yaml'
+    - '!config/stack-*.yaml'
     - '!touchup.sh'
     - '!CITATION.cff'
   schedule:

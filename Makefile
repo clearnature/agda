@@ -719,7 +719,7 @@ run-doctest:
 # For example: `make set-default-stack-file GHC_COMPILER=8.10.2`
 
 set-default-stack-file : remove-default-stack-file ##
-	ln -s stack-$(GHC_COMPILER).yaml stack.yaml
+	ln -s config/stack-$(GHC_COMPILER).yaml stack.yaml
 
 remove-default-stack-file : ##
 	rm -f stack.yaml

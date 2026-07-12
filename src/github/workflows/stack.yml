@@ -10,7 +10,7 @@ on:
     paths: &trigger_path_list
     - '.github/workflows/stack.yml'
     - 'Agda.cabal'
-    - 'stack-*.yaml'
+    - 'config/stack-*.yaml'
     - 'src/size-solver/size-solver.cabal'
     # Andreas, 2023-01-27, issue #8460:
     # Restrict this workflow to changes in the *.cabal and stack*.yaml files
@@ -107,7 +107,7 @@ jobs:
         echo "STACK_VER=$(stack --numeric-version)"                     >> "${GITHUB_ENV}"
         GHC_VER=$(ghc --numeric-version)
         echo "GHC_VER=${GHC_VER}"                                       >> "${GITHUB_ENV}"
-        echo "ARGS=--stack-yaml=stack-${GHC_VER}.yaml --system-ghc --no-terminal"    >> "${GITHUB_ENV}"
+        echo "ARGS=--stack-yaml=config/stack-${GHC_VER}.yaml --system-ghc --no-terminal"    >> "${GITHUB_ENV}"
     # From now on, use env.GHC_VER rather than matrix.ghc-ver
 
     - name: Install the ICU library (macOS)
@@ -168,7 +168,7 @@ jobs:
         # everytime the resolver updates or extra-deps are added.
         # 2023-03-28: We also include Agda.cabal so that the cache gets rewritten if a new dependency is added.
       with:
-        key: ${{ env.key }}-plan-${{ hashFiles('Agda.cabal', format('stack-{0}.yaml', env.GHC_VER)) }}
+        key: ${{ env.key }}-plan-${{ hashFiles('Agda.cabal', format('config/stack-{0}.yaml', env.GHC_VER)) }}
         restore-keys: ${{ env.key}}-
         path: &cache_pathes |
           ${{ env.STACK_ROOT }}
