@@ -4,7 +4,7 @@ compiler-check: match-exact
 
 # Local packages specified by relative directory name.
 packages:
-- '.'
+- '..'
 
 extra-deps:
 - infinite-list-0.1.2

@@ -66,11 +66,11 @@ jobs:
         # stack exec ${ARGS} -- pacman --noconfirm -S msys2-keyring
         # stack exec ${ARGS} -- bash -c "curl -LO ${ICU_URL} && pacman --noconfirm -U *.pkg.tar.zst"
         # shellcheck disable=SC2086
-        stack exec ${ARGS} -- pacman --noconfirm -S mingw-w64-x86_64-icu mingw-w64-x86_64-pkgconf mingw-w64-x86_64-zlib
+        pacman --noconfirm -S mingw-w64-x86_64-icu mingw-w64-x86_64-pkgconf mingw-w64-x86_64-zlib
     - name: Determine the ICU version
       run: |
         # shellcheck disable=SC2086
-        ICU_VER=$(stack exec ${ARGS} -- pkg-config --modversion icu-i18n)
+        ICU_VER=$(pkg-config --modversion icu-i18n)
         echo "ICU_VER=${ICU_VER}"
         echo "ICU_VER=${ICU_VER}" >> "${GITHUB_ENV}"
     - name: Environment (review)

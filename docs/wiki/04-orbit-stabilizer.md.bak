@@ -1,0 +1,83 @@
+# Orbit-Stabilizer 谱投影定理
+
+> 将代数、几何、拓扑钉死在一起的终极同构。Orbit x ≃ A₄/Stab x 是 CRT 谱域转换——不是 Path 等式。
+
+## 核心主张
+
+```
+Orbit x    = Σ T6Lattice (λ y → ∥ A4OrbitEquiv x y ∥₂)
+           = 空间域 (粒子在 T⁶ 上的几何位置, 729格点, 6D)
+
+A4/Stab x  = A4Element / CosetEquiv x
+           = 频率域 (对应哪个谐波模式, 12陪集, 0D)
+
+orbitStabilizer : Orbit x ≃ A4/Stab x
+           = CRT 谱投影 — 空间域 ⇄ 频率域
+           = 不是等式, 不是同构, 是谱域转换
+           = 6D→0D 的维度投影
+```
+
+## 为什么不能是 Path 等式
+
+1D Path 等式类型无法编码 6D→0D 的投影。
+`orbitStabilizer` 是 **Iso/Equiv** — 加密了往返恒等 (section/retraction) 作为结构映射，而非点态等式。
+
+## 当前实现
+
+```
+T6.agda:
+├── orbitStabilizer← : A4/Stab x → Orbit x    ✅ 构造性
+├── orbitStabilizer→ : Orbit x → A4/Stab x    ✅ 构造性 (用 STrec)
+├── sec' / ret'      : 往返恒等               🟡 空洞
+├── orbitIso         : Iso (Orbit x) (A4/Stab x)  🔴 postulate
+└── orbitStabilizer  : Orbit x ≃ A4/Stab x    🟡 依赖 orbitIso
+```
+
+## φ 是 GF(2) 残骸 — 不应存在
+
+```agda
+-- GF(2) 范式: 逐群元映射 (错误)
+φ x g = (a4Action g x , ∣(g , reflᶜ)∣₂)
+
+-- C3/A4 范式: 全局谱投影 (正确)
+-- 不需要 φ。orbitStabilizer 本身就是自足的谱域转换。
+```
+
+**设计决策**: φ 和 φ-respects 从 C3/A4 范式中移除。
+它们是将全局谱投影暴力分解为逐点映射的 GF(2) 残骸。
+
+## 谱域转换 vs 代数同构
+
+| 维度 | 代数同构 (GF2) | 谱域转换 (C3/A4) |
+|---|---|---|
+| 映射方式 | f: A → B, 逐元素 | Orbit ⇄ A4/Stab, 全局 |
+| 证明方式 | Path 等式 (1D) | Iso/Equiv (结构) |
+| 维度关系 | 同维映射 | 6D→0D 投影 |
+| 工具 | ΣPathP, φ-respects | CRT 正交分解, 商空间 |
+
+## 与 CRT 的关系
+
+orbitStabilizer 是 CRT 在群作用空间上的推广：
+- CRT: Z/M → Z/p × Z/q (1D→2D 谱投影)
+- Orbit-Stabilizer: Orbit x → A4/Stab x (6D→0D 谱投影)
+
+两者都依赖**正交分解** (Bézout/互质 → 幻方正交/拓扑内积)。
+
+## 代码对应
+
+| 组件 | 文件:行 | 状态 |
+|---|---|---|
+| Orbit 定义 | `T6.agda:144-145` | ✅ |
+| A4/Stab 定义 | `T6.agda:152-153` | ✅ |
+| orbitStabilizer← | `T6.agda:221-222` | ✅ |
+| orbitStabilizer→ | `T6.agda:226-227` | ✅ |
+| sec' / ret' | `T6.agda:231-232` | 🟡 空洞 |
+| orbitIso | `T6.agda:240` | 🔴 postulate |
+| orbitStabilizer | `T6.agda:245-246` | 🟡 依赖 orbitIso |
+
+## 跨文档引用
+
+- [CRT 的本质](00-crt-wave-physics.md) — 谱投影范式
+- [代数极](01-algebraic-pole.md) — A₄ 群定义
+- [几何极](02-geometric-pole.md) — T⁶ 晶格
+- [拓扑极](03-topological-pole.md) — ∥·∥₂ 截断选择
