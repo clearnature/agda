@@ -319,8 +319,6 @@ jobs:
       # 6m  3s (2022-06-17)
 
     - name: "Standard library compiler tests"
-      env:
-        GHCRTS: -M6G
       run: make std-lib-compiler-test
 
     - name: "Successful tests using the standard library"
