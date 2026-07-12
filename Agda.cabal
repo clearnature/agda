@@ -88,13 +88,13 @@ extra-doc-files:
     doc/release-notes/2.2.0.md
 
 extra-source-files:
-    stack-9.14.1.yaml
-    stack-9.12.4.yaml
-    stack-9.10.3.yaml
-    stack-9.8.4.yaml
-    stack-9.6.7.yaml
-    stack-9.4.8.yaml
-    stack-9.2.8.yaml
+    config/stack-9.14.1.yaml
+    config/stack-9.12.4.yaml
+    config/stack-9.10.3.yaml
+    config/stack-9.8.4.yaml
+    config/stack-9.6.7.yaml
+    config/stack-9.4.8.yaml
+    config/stack-9.2.8.yaml
     -- Agda's data files, embedded by module Agda.Setup.
     -- Keep in sync with the list in Agda.Setup.DataFiles and below.
     src/data/emacs-mode/agda-input.el
