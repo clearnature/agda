@@ -160,3 +160,4 @@ name: Build (stack)
     - config/stack-*.yaml
     - src/size-solver/size-solver.cabal
   workflow_dispatch: null
+
