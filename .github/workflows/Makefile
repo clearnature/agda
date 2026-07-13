@@ -17,7 +17,6 @@ all : json2yaml-version $(targets)
 % : $(srcpath)/% $(header) Makefile
 	@cp $(header) $@
 	yaml2json $< | json2yaml - >> $@
-	python3 fix-yaml-order.py $@
 
 # Check that correct version of json2yaml is used.
 #

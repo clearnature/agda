@@ -149,6 +149,13 @@ jobs:
         ICU_VER=$(stack exec ${ARGS} -- pkg-config --modversion icu-i18n)
         echo "ICU_VER=${ICU_VER}"
         echo "ICU_VER=${ICU_VER}" >> "${GITHUB_ENV}"
+    - if: runner.os == 'Windows'
+      name: Determine the ICU version (Windows)
+      shell: pwsh
+      run: |
+        $env:PATH = "C:\msys64\usr\bin;$env:PATH"
+        $ver = & pkg-config --modversion icu-i18n 2>`$null
+        echo "ICU_VER=$ver" | Out-File -FilePath $env:GITHUB_ENV -Append
 
     - name: Environment (review)
       run: |
