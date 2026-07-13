@@ -117,7 +117,7 @@ jobs:
       with:
         submodules: recursive
 
-    # haskell-actions/setup@v2 removed: it has a bug (opts.ts:159) where
+    # has been replaced by clearnature/setup@main (haskell-actions/setup@v2 had a bug (opts.ts:159) where
     # `enable-stack: false` still resolves stack-version → GHCup-00130.
     # We use system GHC + system stack instead (ubuntu-24.04 runner).
     # See: https://github.com/agda/agda/issues/8619

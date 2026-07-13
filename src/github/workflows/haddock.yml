@@ -45,7 +45,7 @@ jobs:
     steps:
     - uses: actions/checkout@v7
 
-    # haskell-actions/setup@v2 removed: it has a bug (opts.ts:159) where
+    # has been replaced by clearnature/setup@main (haskell-actions/setup@v2 had a bug (opts.ts:159) where
     # it tries to resolve stack-version → GHCup-00130.
     # We use system GHC + cabal instead (ubuntu-24.04 runner).
     # See: https://github.com/agda/agda/issues/8619
