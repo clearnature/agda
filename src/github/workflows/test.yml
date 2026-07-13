@@ -70,7 +70,7 @@ env:
   # Variables of/for the Makefile
   PARALLEL_TESTS: 2
   AGDA_TESTS_OPTIONS: "-j${PARALLEL_TESTS} --hide-successes"
-  STACK: "stack --stack-yaml=config/stack-9.14.1.yaml --system-ghc"
+  STACK: "stack --stack-yaml=${{ github.workspace }}/config/stack-9.14.1.yaml --system-ghc"
   HAS_STACK: "1"
 
   # tasty configuration (see issue #3905)

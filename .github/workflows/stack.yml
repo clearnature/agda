@@ -52,7 +52,7 @@ jobs:
         echo "STACK_VER=$(stack --numeric-version)"                     >> "${GITHUB_ENV}"
         GHC_VER=$(ghc --numeric-version)
         echo "GHC_VER=${GHC_VER}"                                       >> "${GITHUB_ENV}"
-        echo "ARGS=--stack-yaml=config/stack-${GHC_VER}.yaml --system-ghc --no-terminal"    >> "${GITHUB_ENV}"
+        echo "ARGS=--stack-yaml=${GITHUB_WORKSPACE}/config/stack-${GHC_VER}.yaml --system-ghc --no-terminal"    >> "${GITHUB_ENV}"
     - if: runner.os == 'macOS'
       name: Install the ICU library (macOS)
       run: |
