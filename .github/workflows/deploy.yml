@@ -83,7 +83,7 @@ jobs:
           cabal g++ gcc gmp-dev gmp-static musl-dev ncurses-dev ncurses-static zlib-static zlib-dev
     - id: setup-haskell
       if: ${{ runner.os != 'Linux' }}
-      uses: haskell-actions/setup@v2
+      uses: clearnature/setup@main
       with:
         cabal-version: ${{ matrix.cabal-ver }}
         ghc-version: ${{ matrix.ghc-ver }}

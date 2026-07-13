@@ -139,7 +139,7 @@ jobs:
           zlib-static
           zlib-dev
 
-    - uses: haskell-actions/setup@v2
+    - uses: clearnature/setup@main
       id: setup-haskell
       if:  ${{ runner.os != 'Linux' }}
       with:
