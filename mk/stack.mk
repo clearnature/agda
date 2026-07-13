@@ -13,7 +13,12 @@ STACK ?= stack
 # These might get in the way of interaction testing.
 STACK_SILENT=$(STACK) --silent
 
-ifneq ($(wildcard $(TOP)/stack.yaml),)
+# HAS_STACK detection:
+# If STACK is already set in environment, the workflow has configured stack explicitly.
+# Otherwise, check if stack.yaml exists in project root.
+ifneq ($(STACK),stack)
+  HAS_STACK := 1
+else ifneq ($(wildcard $(TOP)/stack.yaml),)
   HAS_STACK := 1
 else
   HAS_STACK :=
