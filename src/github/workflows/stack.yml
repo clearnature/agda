@@ -133,10 +133,9 @@ jobs:
 
     - name: Install the ICU library (Windows)
       if: runner.os == 'Windows'
-      shell: pwsh
       run: |
-        $env:PATH = "C:\msys64\usr\bin;$env:PATH"
-        pacman --noconfirm -S mingw-w64-x86_64-icu mingw-w64-x86_64-pkgconf mingw-w64-x86_64-zlib
+        # shellcheck disable=SC2086
+        stack exec ${ARGS} -- pacman --noconfirm -S mingw-w64-x86_64-icu mingw-w64-x86_64-pkgconf mingw-w64-x86_64-zlib
       # env:
       #   # Amélia Liao (2022-08-16):
       #   # Use a known-good version of ICU from the msys2 repository since
@@ -149,13 +148,6 @@ jobs:
         ICU_VER=$(stack exec ${ARGS} -- pkg-config --modversion icu-i18n)
         echo "ICU_VER=${ICU_VER}"
         echo "ICU_VER=${ICU_VER}" >> "${GITHUB_ENV}"
-    - if: runner.os == 'Windows'
-      name: Determine the ICU version (Windows)
-      shell: pwsh
-      run: |
-        $env:PATH = "C:\msys64\usr\bin;$env:PATH"
-        $ver = & pkg-config --modversion icu-i18n 2>`$null
-        echo "ICU_VER=$ver" | Out-File -FilePath $env:GITHUB_ENV -Append
 
     - name: Environment (review)
       run: |

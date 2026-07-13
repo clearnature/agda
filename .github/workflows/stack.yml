@@ -62,22 +62,14 @@ jobs:
     - if: runner.os == 'Windows'
       name: Install the ICU library (Windows)
       run: |
-        $env:PATH = "C:\msys64\usr\bin;$env:PATH"
-        pacman --noconfirm -S mingw-w64-x86_64-icu mingw-w64-x86_64-pkgconf mingw-w64-x86_64-zlib
-      shell: pwsh
+        # shellcheck disable=SC2086
+        stack exec ${ARGS} -- pacman --noconfirm -S mingw-w64-x86_64-icu mingw-w64-x86_64-pkgconf mingw-w64-x86_64-zlib
     - name: Determine the ICU version
       run: |
         # shellcheck disable=SC2086
         ICU_VER=$(stack exec ${ARGS} -- pkg-config --modversion icu-i18n)
         echo "ICU_VER=${ICU_VER}"
         echo "ICU_VER=${ICU_VER}" >> "${GITHUB_ENV}"
-    - if: runner.os == 'Windows'
-      name: Determine the ICU version (Windows)
-      run: |
-        $env:PATH = "C:\msys64\usr\bin;$env:PATH"
-        $ver = & pkg-config --modversion icu-i18n 2>`$null
-        echo "ICU_VER=$ver" | Out-File -FilePath $env:GITHUB_ENV -Append
-      shell: pwsh
     - name: Environment (review)
       run: |
         echo "STACK_ROOT (fix)  = ${STACK_ROOT}"
