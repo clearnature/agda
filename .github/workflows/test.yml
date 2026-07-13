@@ -64,7 +64,7 @@ jobs:
       with:
         key: test.yml-1-ghc-${{ steps.setup-haskell.outputs.ghc-version }}-stack-${{
           steps.setup-haskell.outputs.stack-version }}-icu-${{ env.ICU_VER }}-plan-${{
-          hashFiles('Agda.cabal','stack.yaml','deps.txt') }}
+          hashFiles('Agda.cabal','config/stack-9.14.1.yaml','deps.txt') }}
         path: ${{ steps.setup-haskell.outputs.stack-root }}
         restore-keys: test.yml-1-ghc-${{ steps.setup-haskell.outputs.ghc-version }}-stack-${{
           steps.setup-haskell.outputs.stack-version }}-icu-${{ env.ICU_VER }}-
@@ -75,7 +75,7 @@ jobs:
     - name: Pack artifacts
       run: |
         tar --use-compress-program zstd --absolute-names -cvf stack.tzst ${{ steps.setup-haskell.outputs.stack-root }}
-        tar --use-compress-program zstd -cvf stack-work.tzst .stack-work stack.yaml stack.yaml.lock deps.txt
+        tar --use-compress-program zstd -cvf stack-work.tzst .stack-work deps.txt
     - name: Upload artifacts
       uses: actions/upload-artifact@v7
       with:
@@ -91,7 +91,7 @@ jobs:
       with:
         key: test.yml-1-ghc-${{ steps.setup-haskell.outputs.ghc-version }}-stack-${{
           steps.setup-haskell.outputs.stack-version }}-icu-${{ env.ICU_VER }}-plan-${{
-          hashFiles('Agda.cabal','stack.yaml','deps.txt') }}
+          hashFiles('Agda.cabal','config/stack-9.14.1.yaml','deps.txt') }}
         path: ${{ steps.setup-haskell.outputs.stack-root }}
         retention-days: 30
   cubical:

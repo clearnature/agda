@@ -165,7 +165,7 @@ jobs:
         # Thus, we include Agda.cabal in the hash.
         # Note that a 'stack.yaml.lock' file would not be sufficient (I think),
         # because it does not list all the dependencies.
-        key: &cache_key test.yml-1-ghc-${{ steps.setup-haskell.outputs.ghc-version }}-stack-${{ steps.setup-haskell.outputs.stack-version }}-icu-${{ env.ICU_VER }}-plan-${{ hashFiles('Agda.cabal','stack.yaml','deps.txt') }}
+        key: &cache_key test.yml-1-ghc-${{ steps.setup-haskell.outputs.ghc-version }}-stack-${{ steps.setup-haskell.outputs.stack-version }}-icu-${{ env.ICU_VER }}-plan-${{ hashFiles('Agda.cabal','config/stack-9.14.1.yaml','deps.txt') }}
         restore-keys: test.yml-1-ghc-${{ steps.setup-haskell.outputs.ghc-version }}-stack-${{ steps.setup-haskell.outputs.stack-version }}-icu-${{ env.ICU_VER }}-
           # Andreas, 2024-05-17, note to myself: not using the env.key trick here because of *cache_key references below...
 
@@ -183,7 +183,7 @@ jobs:
     - name: "Pack artifacts"
       run: |
         tar --use-compress-program zstd --absolute-names -cvf stack.tzst ${{ steps.setup-haskell.outputs.stack-root }}
-        tar --use-compress-program zstd -cvf stack-work.tzst .stack-work stack.yaml stack.yaml.lock deps.txt
+        tar --use-compress-program zstd -cvf stack-work.tzst .stack-work deps.txt
 
     - name: "Upload artifacts"
       uses: actions/upload-artifact@v7
