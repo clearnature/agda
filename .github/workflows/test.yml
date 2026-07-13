@@ -8,9 +8,9 @@
 env:
   AGDA_TESTS_OPTIONS: -j${PARALLEL_TESTS} --hide-successes
   GHC_VER: 9.14.1
+  HAS_STACK: '1'
   PARALLEL_TESTS: 2
   STACK: stack --stack-yaml=config/stack-9.14.1.yaml --system-ghc
-  HAS_STACK: "1"
   TASTY_ANSI_TRICKS: 'false'
 jobs:
   build:
