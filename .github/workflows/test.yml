@@ -10,6 +10,7 @@ env:
   GHC_VER: 9.14.1
   PARALLEL_TESTS: 2
   STACK: stack --stack-yaml=config/stack-9.14.1.yaml --system-ghc
+  HAS_STACK: "1"
   TASTY_ANSI_TRICKS: 'false'
 jobs:
   build:
