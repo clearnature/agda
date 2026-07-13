@@ -60,12 +60,11 @@ jobs:
         ICU4C=$(brew --prefix)/opt/icu4c
         echo "PKG_CONFIG_PATH=${ICU4C}/lib/pkgconfig" >> "${GITHUB_ENV}"
     - if: runner.os == 'Windows'
+    - if: runner.os == 'Windows'
       name: Install the ICU library (Windows)
+      shell: pwsh
       run: |
-        # stack exec ${ARGS} -- pacman --noconfirm -Syuu
-        # stack exec ${ARGS} -- pacman --noconfirm -S msys2-keyring
-        # stack exec ${ARGS} -- bash -c "curl -LO ${ICU_URL} && pacman --noconfirm -U *.pkg.tar.zst"
-        # shellcheck disable=SC2086
+        $env:PATH = "C:\msys64\usr\bin;$env:PATH"
         pacman --noconfirm -S mingw-w64-x86_64-icu mingw-w64-x86_64-pkgconf mingw-w64-x86_64-zlib
     - name: Determine the ICU version
       run: |
