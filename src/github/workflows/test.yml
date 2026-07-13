@@ -70,7 +70,7 @@ env:
   # Variables of/for the Makefile
   PARALLEL_TESTS: 2
   AGDA_TESTS_OPTIONS: "-j${PARALLEL_TESTS} --hide-successes"
-  STACK: "stack --system-ghc"
+  STACK: "stack --stack-yaml=config/stack-9.14.1.yaml --system-ghc"
 
   # tasty configuration (see issue #3905)
   TASTY_ANSI_TRICKS: "false"
@@ -128,10 +128,6 @@ jobs:
         echo "stack-version=$(stack --numeric-version)" >> "${GITHUB_OUTPUT}"
         echo "stack-root=$(stack path --stack-root)" >> "${GITHUB_OUTPUT}"
         echo "STACK_ROOT=$(stack path --stack-root)" >> "${GITHUB_ENV}"
-
-    # The Makefile tests whether stack.yaml is present to decide on stack vs. cabal build.
-    - name: "Copy stack-${{ env.GHC_VER}}.yaml to stack.yaml"
-      run:  ln -sf config/stack-${{ env.GHC_VER }}.yaml stack.yaml
 
     # Update the package index.
     # Issue #8211: do this as explicit step so that the following one will not bear its costs.
