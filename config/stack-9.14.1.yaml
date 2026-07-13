@@ -1,5 +1,6 @@
 # NOTE: bump this comment to force a CI cache miss when build dependencies change
 #       (the cache key includes hashFiles of this file, not individual .hs sources)
+# cache-bust: 2026-07-13 (force rebuild for -rtsopts)
 resolver: nightly-2026-05-27
 compiler: ghc-9.14.1
 compiler-check: match-exact
