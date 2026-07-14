@@ -61,7 +61,7 @@ jobs:
         - os: macos-15
           ghc-ver: 9.12.4
         - os: windows-2025
-          ghc-ver: 9.12.4
+          ghc-ver: 9.14.1
 
     # # Try "allowed-failure" for Windows with GHC 9.2
     # continue-on-error: ${{ startsWith(matrix.os, 'windows') && startsWith(matrix.ghc-ver,'9.2') }}
