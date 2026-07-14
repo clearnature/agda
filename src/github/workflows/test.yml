@@ -184,7 +184,7 @@ jobs:
       run: |
         tar --use-compress-program zstd --absolute-names -cvf stack.tzst ${{ steps.setup-haskell.outputs.stack-root }}
         ln -sf config/stack-${{ env.GHC_VER }}.yaml stack.yaml
-        tar --use-compress-program zstd -cvf stack-work.tzst .stack-work stack.yaml deps.txt
+        tar --use-compress-program zstd -cvf stack-work.tzst .stack-work config/.stack-work stack.yaml deps.txt
 
     - name: "Upload artifacts"
       uses: actions/upload-artifact@v7
