@@ -980,7 +980,14 @@ unify s strategy = do
             _               -> return y
 
     failure :: Monad m => m (UnificationResult' a)
-    failure = return $ UnifyStuck []
+    failure = case (eqLHS s, eqRHS s) of
+      (u : _, v : _)
+        | Def d es <- unArg u, Def d' es' <- unArg v
+        , d /= d'
+        , [] <- mustAllApplyElims es
+        , [] <- mustAllApplyElims es'
+        -> return $ NoUnify $ UnifyConflict (varTel s) (unArg u) (unArg v)
+      _ -> return $ UnifyStuck []
 
 -- | Turn a term into a pattern while binding as many of the given forced variables as possible (in
 --   non-forced positions).
