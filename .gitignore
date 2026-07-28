@@ -110,3 +110,4 @@ run_tests.sh
 docs/wiki/
 scholar_verification.py
 .qwen/
+*.bak
