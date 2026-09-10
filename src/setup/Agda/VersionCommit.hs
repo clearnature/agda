@@ -11,9 +11,9 @@ import Development.GitRev
 
 import Agda.Version
 
--- | Agda's version suffixed with the git commit hash.
+-- | Agda's version, tagged as the local nightly build.
 versionWithCommitInfo :: String
-versionWithCommitInfo = version ++ maybe "" ("-" ++) commitInfo
+versionWithCommitInfo = version ++ "-nightly"
 
 -- | Information about current git commit, generated at compile time.
 commitInfo :: Maybe String
