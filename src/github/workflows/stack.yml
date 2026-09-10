@@ -4,8 +4,6 @@ on:
   push:
     branches:
     - master
-    - ci-*
-    - release*
 
     paths: &trigger_path_list
     - '.github/workflows/stack.yml'
@@ -58,8 +56,8 @@ jobs:
           # If switching to a new GHC minor version needs manual action, i.e.,
           # adding the respective stack-x.y.z.yaml file.
         include:
-        - os: macos-15
-          ghc-ver: 9.12.4
+        - os: macos-26
+          ghc-ver: 9.14.1
         - os: windows-2025
           ghc-ver: 9.14.1
 

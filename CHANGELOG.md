@@ -157,6 +157,32 @@ Pragmas and options
 * New options `--irrelevance` (default on) and `--no-irrelevance` to allow or
   disallow the irrelevance modality.
 
+* The new (experimental and possibly unstable) options
+  `--erased-funext`, `--erased-propext` and `--erased-quotients`
+  enable use of `Agda.Builtin.Erased.Funext`,
+  `Agda.Builtin.Erased.Propext` and `Agda.Builtin.Erased.Quotient`,
+  respectively.
+
+  All options imply `--erasure`, and `--erased-quotients` implies
+  `--erased-funext`.
+
+  These modules contain erased postulates. The idea is that it should
+  be safe to use these postulates (in the absence of any Agda bugs):
+
+  * If `--erased-matches` is not used, then canonicity should hold for
+    non-erased terms (if all opaque definitions are made transparent,
+    the context only contains erased assumptions, and the context plus
+    the postulates are jointly consistent).
+
+  * If `--erased-matches` is used, then reduction might get stuck, but
+    compiled programs should still run correctly.
+
+  `Agda.Builtin.Erased.Funext` postulates function extensionality,
+  `Agda.Builtin.Erased.Propext` postulates propositional
+  extensionality, and `Agda.Builtin.Erased.Quotient` gives access to
+  an implementation of set quotients with an eliminator that computes
+  for the point constructor.
+
 Errors
 ------
 
@@ -173,6 +199,10 @@ Errors
 
 * Errors `GenericError` and `GenericDocError` have been replaced by more specific errors.
   (Issue [#7225](https://github.com/agda/agda/issues/7225).)
+
+* New error `NamedWhereModuleUnderWith` for named `where`-modules in clauses
+  using with-abstraction; see the entry under _Language_.
+  (Issue [#8698](https://github.com/agda/agda/issues/8698).)
 
 * Generalisation failures due to unresolvable dependencies between a
   generalized variable and unsolved metavariables have new, specific
@@ -320,6 +350,59 @@ Language
 
 Changes to type checker and other components defining the Agda language.
 
+* (**BREAKING**) Named `where`-modules (`module M where`) are no longer
+  allowed in clauses that use with-abstraction, i.e. clauses with `with`,
+  `rewrite`, or `with p ← e`.  Such a clause is now rejected with the new
+  error `NamedWhereModuleUnderWith`:
+  ```agda
+  f : Bool → Bool
+  f x with x
+  ... | true  = local
+    module M where   -- rejected
+    local = false
+  ... | false = true
+  ```
+  With-abstraction can change the types of the module parameters that `M`
+  inherits from its parent module, so the telescope of `M` lies about them.
+  Since `M` is visible outside of the clause, it could then be instantiated
+  with ill-typed arguments, which allowed a proof of `⊥`.
+
+  Ordinary anonymous `where`-blocks are unaffected, and so is
+  `using p ← e`, which does not with-abstract but introduces a let-binding.
+  (Issue [#8698](https://github.com/agda/agda/issues/8698).)
+
+* (**BREAKING**) The pseudo-name `R.constructor`, which refers to the
+  constructor of record `R`, is now resolved by the ordinary scope lookup:
+  `constructor` is a name bound in the record module `R`.
+  (It can never be written unqualified, since `constructor` is a keyword;
+  in particular, `open R` does not bring it into scope, and a module
+  application `module M = R` does not provide `M.constructor`.)
+
+  Consequently, the qualification `R` in `R.constructor` is now interpreted
+  as the name of the record *module* rather than the name of the record
+  *type*.  Thus, this now succeeds:
+  ```agda
+  module M where
+    record R : Set where
+
+  open M using (module R)
+
+  t = R.constructor   -- used to fail
+  ```
+  while this now fails:
+  ```agda
+  module M where
+    record R : Set where
+
+  open M using (R) hiding (module R)
+
+  t = R.constructor   -- used to succeed
+  ```
+
+  This also fixes [Issue #8625](https://github.com/agda/agda/issues/8625):
+  an internal error when referring to `R.constructor` from the interaction
+  top level.
+
 * (**BREAKING**): In the presence of `--erasure`, types of lambdas expressions
   are not inferred unless every lambda-bound variable has been given its erasure
   status (`@0` or `@ω`) explicitely.
@@ -338,9 +421,18 @@ Changes to type checker and other components defining the Agda language.
 * (**BREAKING**): Instance search will no longer eta-expand non-instance
   (visible and hidden) variables of record type in the context to find
   instance fields ([PR #8367](https://github.com/agda/agda/pull/8367)).
-  This means code like the following will no longer work, since it
-  relied on eta-expanding the **visible** argument `r : R` to find the
-  instance field.
+
+  This change means that instance search can now happen even when the types of
+  non-instance arguments are yet-unsolved metavariables. Specifically, instance
+  search now works in functions with a type signature of the form `∀ x → ...`,
+  where previously it would require the type of `x` to be annotated.
+
+  It also means that instance search no longer requires head-normalising the
+  types of non-instance function arguments, which may have a positive effect on
+  type checking performance.
+
+  Due to this change, code that relied on eta-expanding visible argument (like
+  `r : R` in the example below) to find the instance field will no longer work.
 
   ```agda
   postulate
@@ -354,18 +446,60 @@ Changes to type checker and other components defining the Agda language.
   fails r = use
   ```
 
-  It can be repaired by explicitly eta-expanding the record pattern:
+  In this case the code can be repaired by explicitly eta-expanding the record
+  pattern:
 
   ```agda
   succeeds : R → Set
   succeeds r@record{} = use -- or just record{}, if r is unused
   ```
 
-  This change allows instance search to work in more contexts
-  (specifically, instance search can now happen even when the types of
-  non-instance arguments are yet-unsolved metavariables, e.g. when they
-  are bound by `∀ x → ...`), and prevents instance search from
-  head-normalising the types of non-instance variables in the context.
+  In other cases more substantial changes might be required. For example, in the
+  code below the record values `Aa` and `Bb` are parameters so they cannot be
+  eta-expanded directly:
+
+  ```agda
+  record IsPointed (A : Set) : Set where
+    field
+      point : A
+  open IsPointed {{...}}
+
+  record PointedSet : Set1 where
+    field
+      Carrier : Set
+      {{IsPointed[Carrier]}} : IsPointed Carrier
+  open PointedSet
+
+  record PointedFunction (Aa Bb : PointedSet) : Set where
+    field
+      run : Aa .Carrier -> Bb .Carrier
+      preserves-point : run point ≡ point
+  ```
+
+  Here it is possible to work around the problem by marking the projection
+  `IsPointed[Carrier]` as an `instance` and then applying the record module
+  `PointedSet` to the respective values `Aa` and `Bb`:
+
+  ```agda
+  record PointedSet : Set1 where
+    field
+      Carrier : Set
+      instance
+        {{IsPointed[Carrier]}} : IsPointed Carrier
+  open PointedSet
+
+  record PointedFunction (Aa Bb : PointedSet) : Set where
+    open PointedSet Aa renaming (Carrier to AA)
+    open PointedSet Bb renaming (Carrier to BB)
+    field
+        run : AA -> BB
+        preserves-point : run point ≡ point
+  ```
+
+  In general, instance search is intended to work well with unbundled structures
+  such as `IsPointed`, while using it with bundled structures such as
+  `PointedSet` might require some more creative workarounds such as the one
+  above.
 
 * Instance search now finds instance fields in *functions* that produce
   eta records ([Issue #8337](github.com/agda/agda/issues/8337)), as
@@ -438,6 +572,21 @@ Library management
 
 Interaction and emacs mode
 --------------------------
+
+* The JSON interaction protocol (`--interaction-json`) no longer loses
+  information that the Emacs frontend displays:
+
+  - `GoalAndHave` responses now include a `boundary` field with the
+    boundary faces of the checked expression
+    ("Boundary (actual)" in the Emacs mode).
+
+  - `NormalForm` and `InferredType` responses now pretty-print the
+    expression in the command state captured when the command ran, as
+    the Emacs frontend does, instead of in the current state
+    (fixes [Issue #5665](https://github.com/agda/agda/issues/5665)).
+
+  - `Mimer` responses now include the `interactionPoint` the solution
+    refers to.
 
 * Syntax highlighting and go-to-definition now also works in the Agda
   information and debug buffers in Emacs where goals etc. are displayed.

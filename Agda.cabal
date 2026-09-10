@@ -126,6 +126,9 @@ extra-source-files:
     src/data/lib/prim/Agda/Builtin/Equality.agda
     src/data/lib/prim/Agda/Builtin/Equality/Erase.agda
     src/data/lib/prim/Agda/Builtin/Equality/Rewrite.agda
+    src/data/lib/prim/Agda/Builtin/Erased/Funext.agda
+    src/data/lib/prim/Agda/Builtin/Erased/Propext.agda
+    src/data/lib/prim/Agda/Builtin/Erased/Quotient.agda
     src/data/lib/prim/Agda/Builtin/Float.agda
     src/data/lib/prim/Agda/Builtin/Float/Properties.agda
     src/data/lib/prim/Agda/Builtin/FromNat.agda
@@ -184,6 +187,9 @@ data-files:
     lib/prim/Agda/Builtin/Equality.agda
     lib/prim/Agda/Builtin/Equality/Erase.agda
     lib/prim/Agda/Builtin/Equality/Rewrite.agda
+    lib/prim/Agda/Builtin/Erased/Funext.agda
+    lib/prim/Agda/Builtin/Erased/Propext.agda
+    lib/prim/Agda/Builtin/Erased/Quotient.agda
     lib/prim/Agda/Builtin/Float.agda
     lib/prim/Agda/Builtin/Float/Properties.agda
     lib/prim/Agda/Builtin/FromNat.agda
@@ -479,7 +485,7 @@ library
   -- This is currently LTS 20.26 (last for GHC 9.2.8).
   build-depends:
     -- Please keep in alphabetical order!
-    , aeson                >= 2.0.3.0   && < 2.3
+    , aeson                >= 2.0.3.0   && < 2.4
     , ansi-terminal        >= 0.11.4    && < 1.2
     , array                >= 0.5.4.0   && < 0.6
     , async                >= 2.2.4     && < 2.3
@@ -1079,6 +1085,7 @@ executable agda-tests
       Compiler.Tests
       CubicalSucceed.Tests
       Fail.Tests
+      Interaction.Simple.Tests
       Interactive.Tests
       Internal.Compiler.MAlonzo.Encode
       Internal.Helpers
