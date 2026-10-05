@@ -21,7 +21,7 @@ jobs:
          && !contains(github.event.head_commit.message, '[skip github]')
       || github.event_name == 'schedule'
       || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
     - name: Info about the context
       run: |
@@ -97,7 +97,7 @@ jobs:
         retention-days: 30
   cubical:
     needs: build
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
     - name: Checkout repo
       uses: actions/checkout@v7
@@ -117,9 +117,53 @@ jobs:
       run: make cubical-test
     - name: Successful tests using the cubical library
       run: make cubical-succeed
+  ecosystem:
+    if: |
+      github.event_name == 'push'
+      || github.event_name == 'schedule'
+      || github.event_name == 'workflow_dispatch'
+      || contains(github.event.head_commit.message, '[ecosystem]')
+      || contains(github.event.pull_request.title, '[ecosystem]')
+    needs: build
+    runs-on: ubuntu-26.04
+    steps:
+    - name: Checkout repo
+      uses: actions/checkout@v7
+      with:
+        submodules: recursive
+    - id: setup-haskell
+      name: Setup Haskell
+      uses: haskell-actions/setup@v2
+      with:
+        cabal-update: false
+        enable-stack: true
+        ghc-version: ${{ env.GHC_VER }}
+        stack-version: latest
+    - name: Download artifacts
+      uses: actions/download-artifact@v8
+      with:
+        name: agda-${{ runner.os }}-${{ github.sha }}
+    - name: Unpack artifacts
+      run: |
+        tar --use-compress-program zstd --absolute-names -xvf stack.tzst
+        tar --use-compress-program zstd -xvf stack-work.tzst
+    - name: Setup Agda
+      run: make setup-agda
+    - name: Check out ${{ matrix.library }}
+      run: make ${{ matrix.library }}
+    - name: Type-check ${{ matrix.library }}
+      run: make ${{ matrix.library }}-test
+    strategy:
+      fail-fast: false
+      matrix:
+        library:
+        - agda-categories
+        - agda-unimath
+        - plfa
+        - TypeTopology
   interaction-latex-html:
     needs: build
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
     - name: Checkout repo
       uses: actions/checkout@v7
@@ -176,7 +220,7 @@ jobs:
       run: yes y | make interaction
   stdlib-test:
     needs: build
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
     - name: Checkout repo
       uses: actions/checkout@v7
@@ -211,7 +255,7 @@ jobs:
       run: make std-lib-interaction
   test:
     needs: build
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     steps:
     - name: Checkout repo
       uses: actions/checkout@v7
@@ -261,7 +305,6 @@ name: Build, Test, and Benchmark
     - '!.github/**'
     - .github/workflows/test.yml
     - '!src/github/**'
-    - src/github/workflows/test.yml
     - '!doc/**'
     - doc/user-manual/**/*.lagda.rst
     - '!src/agda-bisect/**'
@@ -293,7 +336,6 @@ name: Build, Test, and Benchmark
     - '!.github/**'
     - .github/workflows/test.yml
     - '!src/github/**'
-    - src/github/workflows/test.yml
     - '!doc/**'
     - doc/user-manual/**/*.lagda.rst
     - '!src/agda-bisect/**'

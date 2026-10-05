@@ -27,23 +27,23 @@ import Control.Monad.Trans.Maybe
 import Control.Applicative ( liftA2 )
 import Control.Monad       ( filterM, forM )
 
-import qualified Data.List as List
-import qualified Data.Map as Map
+import Data.List qualified as List
+import Data.Map qualified as Map
 import Data.Maybe
 import Data.Set (Set)
-import qualified Data.Set as Set
-import qualified Data.Text as T
+import Data.Set qualified as Set
+import Data.Text qualified as T
 import Data.Traversable (mapM)
 
 import Agda.Syntax.Literal
 import Agda.Syntax.Position
 import Agda.Syntax.Common
-import qualified Agda.Syntax.Common.Aspect as Asp
-import qualified Agda.Syntax.Concrete.Name as C
+import Agda.Syntax.Common.Aspect qualified as Asp
+import Agda.Syntax.Concrete.Name qualified as C
 import Agda.Syntax.Concrete (FieldAssignment'(..), TacticAttribute'(..))
 import Agda.Syntax.Info as Info
 import Agda.Syntax.Abstract as A hiding (Binder)
-import qualified Agda.Syntax.Abstract as A
+import Agda.Syntax.Abstract qualified as A
 import Agda.Syntax.Abstract.Pattern
 import Agda.Syntax.Abstract.Pretty
 import Agda.Syntax.Abstract.UsedNames
@@ -67,13 +67,13 @@ import {-# SOURCE #-} Agda.TypeChecking.Records
 import Agda.Interaction.Options
 
 import Agda.Utils.Either
+import Agda.Utils.Function (applyUnless)
 import Agda.Utils.Functor
 import Agda.Utils.Lens
 import Agda.Utils.List
 import Agda.Utils.List1 (List1, pattern (:|))
-import qualified Agda.Utils.List1 as List1
-import qualified Agda.Utils.Maybe.Strict as Strict
-import Agda.Syntax.Scope.Monad (freshAbstractName_)
+import Agda.Utils.List1 qualified as List1
+import Agda.Utils.Maybe.Strict qualified as Strict
 import Agda.Utils.Maybe
 import Agda.Utils.Monad
 import Agda.Utils.Null
@@ -81,6 +81,8 @@ import Agda.Utils.Permutation
 import Agda.Syntax.Common.Pretty
 import Agda.Utils.Singleton
 import Agda.Utils.Size
+import Agda.Utils.SmallSet (SmallSet)
+import Agda.Utils.SmallSet qualified as SmallSet
 import Agda.Utils.Tuple
 
 import Agda.Utils.Impossible
@@ -526,10 +528,8 @@ reifyTerm expandAnonDefs0 v0 = tryReifyAsLetBinding v0 $ do
     I.Con c ci es -> do
 
       -- If the origin is a record expression, print a record expression.
-      if
-        | ci == ConORec      -> recordExpression Nothing
-        | ci == ConORecWhere -> recordWhereExpr
-        | otherwise -> isRecordConstructor x >>= \case
+      if ci == ConORec then recordExpression Nothing else do
+        isRecordConstructor x >>= \case
           -- If it is a generated constructor, print a record expression.
           Just (r, def) | not (_recNamedCon def) -> recordExpression $ Just (r, def)
 
@@ -547,23 +547,6 @@ reifyTerm expandAnonDefs0 v0 = tryReifyAsLetBinding v0 $ do
             . filter' keep
             . zip' (recordFieldNames def)
             <$> reify (fromMaybe __IMPOSSIBLE__ $ allApplyElims es)
-
-        recordWhereExpr = do
-          (r, def) <- fromMaybe __IMPOSSIBLE__ <$> isRecordConstructor x
-          showImp <- showImplicitArguments
-          let
-            keep (a, v) = showImp || ConversionFail == argInfoOrigin (argInfo v) || visible a
-            fake (nm, Arg _ exp) = do
-              qn <- freshName_ (unDom nm)
-              let decl = A.LetBind (LetRange noRange) (domInfo nm) (A.BindName qn) (A.Underscore emptyMetaInfo) exp
-              pure (decl, FieldAssignment (unDom nm) (A.Var qn))
-
-          -- The list of fake FieldAssignments tells AbstractToConcrete
-          -- to not pick disambiguators for the names we just invented.
-          fields <- filter keep . zip' (recordFieldNames def) <$> reify (fromMaybe __IMPOSSIBLE__ $ allApplyElims es)
-          (decl, assign) <- unzip <$> traverse fake fields
-
-          pure $ A.RecWhere empty noExprInfo decl assign
 
         constructorApplication = reifyDisplayForm x es $ do
           def <- getConstInfo x
@@ -1225,8 +1208,6 @@ instance BlankVars A.Expr where
     A.Let _ _ _              -> __IMPOSSIBLE__
     A.Rec kwr i es           -> A.Rec kwr i $ blank bound es
     A.RecUpdate kwr i e es   -> uncurry (A.RecUpdate kwr i) $ blank bound (e, es)
-    A.RecWhere _ _ _ _       -> __IMPOSSIBLE__
-    A.RecUpdateWhere{}       -> __IMPOSSIBLE__
     A.Quote {}               -> __IMPOSSIBLE__
     A.QuoteTerm {}           -> __IMPOSSIBLE__
     A.Unquote {}             -> __IMPOSSIBLE__
@@ -1416,6 +1397,30 @@ reifyPatterns = mapM $ (stripNameFromExplicit . stripHidingFromPostfixProj) <.>
     addAsBindings :: Functor m => [A.Name] -> m A.Pattern -> m A.Pattern
     addAsBindings xs p = foldr (fmap . AsP patNoRange . mkBindName) p xs
 
+{-# SPECIALIZE reifyRecordFields :: SmallSet Origin -> RecordData -> (NamedArg A.Pattern -> A.Pattern) -> [NamedArg A.Pattern] -> TCM [FieldAssignment' A.Pattern] #-}
+{-# SPECIALIZE reifyRecordFields :: SmallSet Origin -> RecordData -> (Arg Expr -> Expr) -> [Arg Expr] -> TCM [FieldAssignment' Expr] #-}
+-- | Pair the fields of a record type with the arguments of its constructor,
+--   producing the field assignments of a record pattern or record expression.
+--
+--   Andreas, 2025-09-29, issue #8787:
+--   Invisible (hidden and instance) fields are dropped unless @--show-implicit@ is on.
+--   This conforms the printing of records to the printing of applications
+--   of a record constructor (see 'stripImplicits' and 'nelims').
+reifyRecordFields :: (MonadReify m, LensOrigin a)
+  => SmallSet Origin  -- ^ Set of origins that make us keep an invisible field anyway.
+  -> RecordData       -- ^ Definition of the record type, supplying the field names.
+  -> (a -> e)         -- ^ How to extract the content of a constructor argument.
+  -> [a]              -- ^ The arguments of the record constructor.
+  -> m [FieldAssignment' e]
+reifyRecordFields keepOrigins def content args = do
+  let fs = recordFieldNames def
+  unless (length fs == length args) __IMPOSSIBLE__
+  showImp <- showImplicitArguments
+  let keep (f, a) = visible f || getOrigin a `SmallSet.member` keepOrigins
+  return $! map' (\ (f, a) -> FieldAssignment (unDom f) (content a))
+         $  applyUnless showImp (filter' keep)
+         $  zip' fs args
+
 {-# SPECIALIZE tryRecPFromConP :: A.Pattern -> TCM A.Pattern #-}
 -- | If the record constructor is generated or the user wrote a record pattern,
 --   turn constructor pattern into record pattern.
@@ -1430,13 +1435,21 @@ tryRecPFromConP p = do
           -- If the record constructor is generated or the user wrote a record pattern,
           -- print record pattern.
           -- Otherwise, print constructor pattern.
-          if _recNamedCon def && conPatOrigin ci /= ConORec then fallback else do
-            let fs = recordFieldNames def
-            unless (length fs == length ps) __IMPOSSIBLE__
-            return $! A.RecP empty ci $ zipWith' mkFA fs ps
-        where
-          mkFA ax nap = FieldAssignment (unDom ax) (namedArg nap)
+          if _recNamedCon def && conPatOrigin ci /= ConORec then fallback else
+            -- Andreas, 2025-09-29, issue #8787: Keep the invisible fields
+            -- the user wrote, just like 'stripImplicits' does for constructor patterns.
+            A.RecP empty ci <$> reifyRecordFields recordPatternKeeperOrigins def namedArg ps
     _ -> __IMPOSSIBLE__
+
+-- | 'Origin' values (e.g. 'UserWritten') that indicate an implicit record field
+--   should be kept during printing of a record pattern.
+recordPatternKeeperOrigins :: SmallSet Origin
+recordPatternKeeperOrigins = SmallSet.fromList [ UserWritten, CaseSplit ]
+
+-- | 'Origin' values (e.g. 'ConversionFail') that indicate an implicit record field
+--   should be kept during printing of a record expression.
+recordExpressionKeeperOrigins :: SmallSet Origin
+recordExpressionKeeperOrigins = SmallSet.fromList [ ConversionFail ]
 
 {-# SPECIALIZE recOrCon :: QName -> ConOrigin -> [Arg Expr] -> TCM A.Expr #-}
 -- | If the record constructor is generated or the user wrote a record expression,
@@ -1449,13 +1462,12 @@ recOrCon c co es = do
     -- If the record constructor is generated or the user wrote a record expression,
     -- print record expression.
     -- Otherwise, print constructor expression.
-    if _recNamedCon def && co /= ConORec then fallback else do
-      let fs = recordFieldNames def
-      unless (length fs == length es) __IMPOSSIBLE__
-      return $! A.Rec empty empty $ zipWith' mkFA fs es
+    if _recNamedCon def && co /= ConORec then fallback else
+      -- Andreas, 2025-09-29, issue #8787: Keep the invisible fields
+      -- the conversion checker insists on, just like 'nelims' does for applications.
+      A.Rec empty empty . map' Left <$> reifyRecordFields recordExpressionKeeperOrigins def unArg es
   where
   fallback = apps (A.Con (unambiguous c)) es
-  mkFA ax  = Left . FieldAssignment (unDom ax) . unArg
 
 instance Reify (QNamed I.Clause) where
   type ReifiesTo (QNamed I.Clause) = A.Clause

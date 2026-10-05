@@ -42,7 +42,7 @@ import Agda.Syntax.Concrete.Definitions ( DeclarationWarning(..) ,DeclarationWar
   -- TODO: move the relevant warnings out of there
 import Agda.Syntax.Scope.Base as A
 import Agda.Syntax.Scope.State
-import Agda.Syntax.Scope.UnusedImports (registerModuleOpening)
+import Agda.Syntax.Scope.UnusedImports (lookedupModule, registerModuleOpening)
 
 import Agda.TypeChecking.Monad.Base as I
 import Agda.TypeChecking.Monad.Builtin
@@ -416,11 +416,14 @@ canHaveSuffixTest = do
   return $ \x -> Just x `elem` [builtinProp, builtinSet, builtinSSet, builtinPropOmega, builtinSetOmega, builtinSSetOmega]
 
 -- | Look up a module in the scope.
+--   Marks the module as used for the unused-imports analysis.
 resolveModule :: C.QName -> ScopeM AbstractModule
 resolveModule x = do
   ms <- scopeLookup x <$> getScope
   caseMaybe (nonEmpty ms) (typeError $ NoSuchModule x) $ \ case
-    AbsModule m why :| [] -> return $ AbsModule (m `withRangeOf` x) why
+    AbsModule m why :| [] -> do
+      let am = AbsModule (m `withRangeOf` x) why
+      am <$ lookedupModule x am
     ms                    -> typeError $ AmbiguousModule x (fmap amodName ms)
 
 -- | Get the fixity of a not yet bound name.
@@ -441,6 +444,7 @@ instance MonadFixityError ScopeM where
   warnUnknownFixityInMixfixDecl       = scopeWarning . UnknownFixityInMixfixDecl
   warnPolarityPragmasButNotPostulates = scopeWarning . PolarityPragmasButNotPostulates
   warnEmptyPolarityPragma             = scopeWarning . EmptyPolarityPragma
+  warnFixityDeclarationForNonOperator r x = scopeWarning $ FixityDeclarationForNonOperator r x
 
 -- | Collect the fixity/syntax declarations and polarity pragmas from the list
 --   of declarations and store them in the scope.
@@ -851,12 +855,16 @@ checkNoFixityInRenamingModule ren = do
     Renaming ImportedModule{} _ mfx _ -> getRange <$> mfx
     _ -> Nothing
 
--- | Check that an import directive doesn't contain repeated names.
-verifyImportDirective :: [C.ImportedName] -> C.HidingDirective -> C.RenamingDirective -> ScopeM ()
-verifyImportDirective usn hdn ren =
-  List1.unlessNull
-    (mapMaybe List2.fromList1Maybe . List1.group . List.sort $ usn ++ hdn ++ map renFrom ren)
-    \ yss -> setCurrentRange yss $ typeError $ RepeatedNamesInImportDirective yss
+-- | Warn about fixity declarations for targets that are non-operators
+--   or closed operators:
+checkNoFixityForClosedOperator :: [C.Renaming] -> ScopeM ()
+checkNoFixityForClosedOperator ren = do
+  forM_ ren \case
+    Renaming (ImportedName _) (ImportedName x) mfx r
+      | Just _ <- mfx, not (isPrePostOrInfixOperator x) -> warnFixityDeclarationForNonOperator r x
+      | otherwise -> pure ()
+    Renaming ImportedModule{} ImportedModule{} _ _ -> pure ()
+    _ -> __IMPOSSIBLE__
 
 -- | Apply an import directive and check that all the names mentioned actually
 --   exist.
@@ -873,19 +881,30 @@ applyImportDirectiveM m (ImportDirective rng usn' hdn' ren' public) scope0 = do
     -- user has supplied fixity annotations to @renaming module@ clauses.
     checkNoFixityInRenamingModule ren'
 
+    -- Andreas, 2026-09-11, issue #1438
+    -- Warn about fixities declared for non- or closed-operators.
+    checkNoFixityForClosedOperator ren'
+    -- TODO (post 2.9.0): purge fixity declarations for closed and non-operators.
+    -- See also 'fixitiesAndPolarities.
+
     -- Andreas, 2020-06-06, issue #4707
     -- Duplicates in @using@ directive are dropped with a warning.
     usingList <- discardDuplicatesInUsing usn'
 
+    -- Check that an import directive doesn't contain repeated names.
+    -- Historic note:
     -- The following check was originally performed by the parser.
     -- The Great Ulf Himself added the check back in the dawn of time
     -- (5ba14b647b9bd175733f9563e744176425c39126)
     -- when Agda 2 wasn't even believed to exist yet.
-    verifyImportDirective usingList hdn' ren'
+    let names' = usingList ++ hdn' ++ map renFrom ren'  -- all mentioned names from the imported module
+    -- Report any duplicates in @names'@.
+    List1.unlessNull (mapMaybe List2.fromList1Maybe $ List1.group $ List.sort names') \ yss ->
+      setCurrentRange yss $ typeError $ RepeatedNamesInImportDirective yss
 
     -- We start by checking that all of the names talked about in the import
     -- directive do exist.  If some do not then we remove them and raise a warning.
-    let (missingExports, namesA) = checkExist $ usingList ++ hdn' ++ map renFrom ren'
+    let (missingExports, namesA) = checkExist names'
     () <- List1.unlessNull missingExports \ missingExports1 -> setCurrentRange rng do
       reportSLn "scope.import.apply" 30 $ "non existing names: " ++ prettyShow missingExports
       warning $ ModuleDoesntExport m (Map.keys namesInScope) (Map.keys modulesInScope) missingExports1
@@ -953,6 +972,11 @@ applyImportDirectiveM m (ImportDirective rng usn' hdn' ren' public) scope0 = do
       -- abstract QName, rather than
       --
       --    renaming (Some.Qualified.Original to new)
+      --
+      -- Andreas, 2026-10-02
+      -- Even though @record where@ has been removed again, and @upd@
+      -- does not make an observable difference any more, we can leave
+      -- @upd@ in.
 
       upd :: C.Name -> A.QName -> A.QName
       upd x nm = setRange (getRange x) $ qualify_ $ (qnameName nm) { nameConcrete = x }

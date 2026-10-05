@@ -16,7 +16,7 @@ module Agda.TypeChecking.Reduce
  , unfoldCorecursion, unfoldCorecursionE
  , unfoldDefinitionE, unfoldDefinitionStep
  , unfoldInlined
- , appDefE_, appDef', appDefE'
+ , appDefE_, appDefE0, appDef', appDefE'
  , abortIfBlocked, ifBlocked, isBlocked, fromBlocked, blockOnError
  -- Simplification
  , Simplify, simplify, simplifyBlocked'
@@ -769,8 +769,7 @@ unfoldDefinitionStep v0 f es =
                , FunctionReductions `SmallSet.member` allowed
                ])
         then
-          reduceNormalE v0 f (map' notReduced es) dontUnfold
-                       (defClauses info) (defCompiled info) rewr
+          reduceNormalE v0 f (map' notReduced es) dontUnfold (defCopyOrClauses info) rewr
         else noReduction $ notBlocked v  -- Andrea(s), 2014-12-05 OK?
 
   where
@@ -790,7 +789,8 @@ unfoldDefinitionStep v0 f es =
                 noReduction $ applyE (Def f []) <$> do
                   blockAll $ map' mredToBlocked es1' ++! map' notBlocked es2
                else
-                reduceNormalE v0 f (es1' ++! map' notReduced es2) dontUnfold cls mcc rewr
+                -- Note: a primitive is never a data/record type copy.
+                reduceNormalE v0 f (es1' ++! map' notReduced es2) dontUnfold (Right (cls, mcc)) rewr
             YesReduction simpl v -> yesReduction simpl $ v `applyE` es2
       where
           ar  = primFunArity pf
@@ -800,23 +800,31 @@ unfoldDefinitionStep v0 f es =
           mredToBlocked (MaybeRed (Reduced b) e) = e <$ b
 
     reduceNormalE ::
-         Term -> QName -> [MaybeReduced Elim] -> Bool -> [Clause]
-      -> Maybe CompiledClauses -> RewriteRules
+         Term -> QName -> [MaybeReduced Elim] -> Bool
+      -> Either Term ([Clause], Maybe CompiledClauses) -> RewriteRules
       -> ReduceM (Reduced (Blocked Term) Term)
-    reduceNormalE v0 f es dontUnfold def mcc rewr = {-# SCC "reduceNormal" #-} do
+    reduceNormalE v0 f es dontUnfold def rewr = {-# SCC "reduceNormal" #-} do
       traceSDoc "tc.reduce" 90 ("reduceNormalE v0 =" <+> pretty v0) $ do
-      case (def,rewr) of
-        _ | dontUnfold -> traceSLn "tc.reduce" 90 "reduceNormalE: don't unfold (non-terminating or delayed)" $
-                          defaultResult -- non-terminating or delayed
-        ([],[])        -> traceSLn "tc.reduce" 90 "reduceNormalE: no clauses or rewrite rules" $ do
-          -- no definition for head
-          (defBlocked <$> getConstInfo f) >>= \case
-            Blocked{}    -> noReduction $ Blocked (UnblockOnDef f) vfull
-            NotBlocked{} -> defaultResult
-        (cls,rewr)     -> do
-          ev <- appDefE_ f v0 cls mcc rewr es
-          debugReduce ev
-          return ev
+      if dontUnfold then
+        traceSLn "tc.reduce" 90 "reduceNormalE: don't unfold (non-terminating or delayed)" $
+          defaultResult -- non-terminating or delayed
+      else case def of
+        -- Andreas, 2026-09-23, issue #8545:
+        -- A data or record type copy is defined by a term rather than by clauses.
+        -- Applying a term never gets stuck, so unlike clause matching this also
+        -- unfolds underapplied occurrences of the copy.
+        Left w -> traceSLn "tc.reduce" 90 "reduceNormalE: unfolding copy" $
+          return $ YesReduction NoSimplification $ w `applyE` map' ignoreReduced es
+        Right (cls, mcc) -> case (cls, rewr) of
+          ([], []) -> traceSLn "tc.reduce" 90 "reduceNormalE: no clauses or rewrite rules" $ do
+            -- no definition for head
+            (defBlocked <$> getConstInfo f) >>= \case
+              Blocked{}    -> noReduction $ Blocked (UnblockOnDef f) vfull
+              NotBlocked{} -> defaultResult
+          _ -> do
+            ev <- appDefE_ f v0 cls mcc rewr es
+            debugReduce ev
+            return ev
       where
       defaultResult = noReduction $ NotBlocked ReallyNotBlocked vfull
       vfull         = v0 `applyE` map' ignoreReduced es
@@ -847,6 +855,12 @@ reduceDefCopy f es = do
     _                          -> reduceDef_ info f es
   where
     reduceDef_ :: Definition -> QName -> Elims -> m (Reduced () Term)
+    -- A data or record type copy is defined by a term, which applies to any
+    -- number of arguments, so there is nothing to eta-expand here (issue #8545).
+    reduceDef_ info f es | Just w <- defCopyClause info =
+      if defNonterminating info
+      then return $ NoReduction ()
+      else return $ YesReduction NoSimplification $ w `applyE` es
     reduceDef_ info f es = case defClauses info of
       [cl] -> do  -- proper copies always have a single clause
         let v0 = Def f [] -- TODO: could be Con
@@ -918,7 +932,7 @@ reduceHead v = do -- ignoreAbstractMode $ do
           red
         Datatype{ dataClause = Just _ } -> red
         Record{ recClause = Just _ }    -> red
-        _                               -> return $ notBlocked v
+        _ -> return $ notBlocked v
     _ -> return $ notBlocked v
 
 -- | Unfold as many copies as possible, and then potentially a single
@@ -972,6 +986,17 @@ appDefE_ f v0 cls mcc rewr args =
   maybe (appDefE'' v0 cls rewr args)
         (\cc -> appDefE v0 cc rewr args) mcc
 
+-- | Like 'appDefE_', but takes the whole 'Definition' and thus also handles
+--   data and record type copies, which are defined by a term rather than by
+--   clauses (see 'defCopyClause').  Applying that term never gets stuck, so this
+--   also unfolds underapplied occurrences of the copy (issue #8545).
+appDefE0 ::
+     QName -> Definition -> Term -> RewriteRules
+  -> MaybeReducedElims -> ReduceM (Reduced (Blocked Term) Term)
+appDefE0 f def v0 rewr args = case defCopyOrClauses def of
+  Left w           -> return $ YesReduction NoSimplification $ w `applyE` map' ignoreReduced args
+  Right (cls, mcc) -> appDefE_ f v0 cls mcc rewr args
+
 -- | Apply a defined function to it's arguments, using the compiled clauses.
 --   The original term is the first argument applied to the third.
 appDef :: Term -> CompiledClauses -> RewriteRules -> MaybeReducedArgs -> ReduceM (Reduced (Blocked Term) Term)
@@ -1007,6 +1032,7 @@ appDefE'' v cls rewr es = traceSDoc "tc.reduce" 90 ("appDefE' v = " <+> pretty v
   where
     goCls :: [Clause] -> [Elim] -> ReduceM (Reduced (Blocked Term) Term)
     goCls cl es = do
+      let done b es = rewrite (NotBlocked b ()) (applyE v) rewr es
       case cl of
         -- Andreas, 2013-10-26  In case of an incomplete match,
         -- we just do not reduce.  This allows adding single function
@@ -1016,39 +1042,41 @@ appDefE'' v cls rewr es = traceSDoc "tc.reduce" 90 ("appDefE' v = " <+> pretty v
         -- is the most conservative reason.
         [] -> do
           f <- fromMaybe __IMPOSSIBLE__ <$> viewTC eAppDef
-          rewrite (NotBlocked (MissingClauses f) ()) (applyE v) rewr es
+          done (MissingClauses f) es
         cl : cls -> do
           let pats = namedClausePats cl
               body = clauseBody cl
               npats = length pats
               nvars = size $ clauseTel cl
-          -- if clause is underapplied, skip to next clause
-          if length es < npats then goCls cls es else do
-            allowedReductions <- viewTC eAllowedReductions
-            let (es0, es1) = splitAt' npats es
-            (m, es0) <- matchCopatterns pats es0
-            let es = es0 ++! es1
-            case m of
-              No _ -> goCls cls es
-              -- Szumi, 2024-03-29, issue #7181:
-              -- If a lazy match is stuck and all non-lazy matches are conclusive,
-              -- then reduction should not be stuck on the current clause and it
-              -- should be fine to continue matching on the next clause.
-              -- This assumes it's impossible for a lazy match to be stuck if
-              -- all non-lazy matches succeed.
-              DontKnow _ OnlyLazy _ -> goCls cls es
-              DontKnow _ NonLazy  b -> rewrite b (applyE v) rewr es
-              Yes simpl vs -- vs is the subst. for the variables bound in body
-                | couldBeRecursive (clauseRecursive cl)
-                , RecursiveReductions `SmallSet.notMember` allowedReductions ->
-                    return $ NoReduction __IMPOSSIBLE__
-                | Just w <- body -> do -- clause has body?
-                    -- TODO: let matchPatterns also return the reduced forms
-                    -- of the original arguments!
-                    -- Andreas, 2013-05-19 isn't this done now?
-                    let sigma = buildSubstitution impossible nvars vs
-                    return $ YesReduction simpl $ applySubst sigma w `applyE` es1
-                | otherwise     -> rewrite (NotBlocked AbsurdMatch ()) (applyE v) rewr es
+          allowedReductions <- viewTC eAllowedReductions
+          let (es0, es1) = splitAt' npats es
+              -- If ps1 /= [] then the function is underapplied
+              (ps0, ps1) = splitAt' (length es) pats
+          (m, es0) <- matchCopatterns ps0 es0
+          let es = es0 ++! es1
+          case m of
+            No _ -> goCls cls es
+            -- Szumi, 2024-03-29, issue #7181:
+            -- If a lazy match is stuck and all non-lazy matches are conclusive,
+            -- then reduction should not be stuck on the current clause and it
+            -- should be fine to continue matching on the next clause.
+            -- This assumes it's impossible for a lazy match to be stuck if
+            -- all non-lazy matches succeed.
+            DontKnow _ OnlyLazy _ -> goCls cls es
+            DontKnow _ NonLazy  b -> rewrite b (applyE v) rewr es
+            Yes simpl vs -- vs is the subst. for the variables bound in body
+              -- Jesper, issue #8703: underapplied functions are stuck
+              | not (null ps1) -> done Underapplied es
+              | couldBeRecursive (clauseRecursive cl)
+              , RecursiveReductions `SmallSet.notMember` allowedReductions ->
+                  return $ NoReduction __IMPOSSIBLE__
+              | Just w <- body -> do -- clause has body?
+                  -- TODO: let matchPatterns also return the reduced forms
+                  -- of the original arguments!
+                  -- Andreas, 2013-05-19 isn't this done now?
+                  let sigma = buildSubstitution impossible nvars vs
+                  return $ YesReduction simpl $ applySubst sigma w `applyE` es1
+              | otherwise -> done AbsurdMatch es
 
 instance Reduce a => Reduce (Closure a) where
     reduce' cl = do
@@ -1845,14 +1873,14 @@ instance InstantiateFull Defn where
         (cs, cc, cov, inv) <- instantiateFull' (cs, cc, cov, inv)
         extLam <- instantiateFull' extLam
         return $! d { funClauses = cs, funCompiled = cc, funCovering = cov, funInv = inv, funExtLam = extLam }
-      Datatype{ dataSort = s, dataClause = cl } -> do
-        s  <- instantiateFull' s
-        cl <- instantiateFull' cl
-        return $! d { dataSort = s, dataClause = cl }
-      Record{ recClause = cl, recTel = tel } -> do
-        cl  <- instantiateFull' cl
+      Datatype{ dataSort = s, dataClause = v } -> do
+        s <- instantiateFull' s
+        v <- instantiateFull' v
+        return $! d { dataSort = s, dataClause = v }
+      Record{ recClause = v, recTel = tel } -> do
+        v   <- instantiateFull' v
         tel <- instantiateFull' tel
-        return $! d { recClause = cl, recTel = tel }
+        return $! d { recClause = v, recTel = tel }
       Constructor{} -> return d
       Primitive{ primClauses = cs } -> do
         cs <- instantiateFull' cs

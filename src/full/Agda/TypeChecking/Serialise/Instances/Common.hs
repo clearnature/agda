@@ -82,6 +82,32 @@ instance EmbPrj Language where
     N2 1 a -> valuN Cubical a
     _      -> malformed
 
+instance EmbPrj AllowedErasedMatchesIndexed where
+  icod_ Restricted   = icodeN'  Restricted
+  icod_ Unrestricted = icodeN 0 Unrestricted
+
+  value = vcase $ \case
+    N0   -> valuN Restricted
+    N1 0 -> valuN Unrestricted
+    _    -> malformed
+
+instance EmbPrj AllowedErasedMatches where
+  icod_ (AllowedErasedMatches e n d) =
+    icodeN' AllowedErasedMatches e n d
+
+  value = valueN AllowedErasedMatches
+
+instance EmbPrj AllowedErasedMatchesWithDefaults where
+  icod_ ErasedMatchesDefault   = icodeN'  ErasedMatchesDefault
+  icod_ ErasedMatchesDefaultOn = icodeN 0 ErasedMatchesDefaultOn
+  icod_ (ErasedMatches a)      = icodeN 1 ErasedMatches a
+
+  value = vcase $ \case
+    N0     -> valuN ErasedMatchesDefault
+    N1 0   -> valuN ErasedMatchesDefaultOn
+    N2 1 a -> valuN ErasedMatches a
+    _      -> malformed
+
 instance EmbPrj a => EmbPrj (Position' a) where
   icod_ (P.Pn file pos line col) = icodeN' P.Pn file pos line col
 
@@ -581,17 +607,15 @@ instance EmbPrj FreeVariables where
     valu _      = malformed
 
 instance EmbPrj ConOrigin where
-  icod_ ConOSystem       = return 0
-  icod_ ConOCon          = return 1
-  icod_ ConORec          = return 2
-  icod_ ConOSplit        = return 3
-  icod_ ConORecWhere     = return 4
+  icod_ ConOSystem = return 0
+  icod_ ConOCon    = return 1
+  icod_ ConORec    = return 2
+  icod_ ConOSplit  = return 3
 
   value 0 = return ConOSystem
   value 1 = return ConOCon
   value 2 = return ConORec
   value 3 = return ConOSplit
-  value 4 = return ConORecWhere
   value _ = malformed
 
 instance EmbPrj ProjOrigin where

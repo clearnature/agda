@@ -12,9 +12,6 @@ module Agda.Primitive.Cubical where
 {-# COMPILE JS i0 = false #-}
 {-# COMPILE JS i1 = true  #-}
 
-infix  30 primINeg
-infixr 20 primIMin primIMax
-
 primitive
     primIMin : I → I → I
     primIMax : I → I → I

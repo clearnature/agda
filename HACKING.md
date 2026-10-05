@@ -120,6 +120,12 @@ When building Agda the following Cabal flags can be used:
     This should *not* be enabled in declarative build environments like Nix or Guix.
     Default: off.
 
+* `version-with-git-hash`
+
+    Suffix version information with the Git commit hash when available.
+    A `-dirty` marker is also included if tracked files have uncommitted changes.
+    Default: off, but on for builds using the Makefile.
+
 Hint: You can set these flags as follows:
 
 * Cabal-install: use the `-f` argument:
@@ -317,6 +323,23 @@ Standard library submodule
 
   See: https://www.git-scm.com/book/en/v2/Git-Tools-Submodules
 
+* The cubical library is vendored as a submodule `/cubical` in the same way,
+  with goals `cubical`, `up-to-date-cubical` and `fast-forward-cubical`.
+
+Ecosystem libraries
+-------------------
+
+Several further large Agda developments are vendored as submodules under
+`/ecosystem` so that we get alerted of regressions we introduce on `master`:
+`agda-categories`, `agda-unimath`, `plfa` and `TypeTopology`.
+
+Unlike `/std-lib` and `/cubical` these submodules are marked `update = none` in
+`/.gitmodules` and are hence *not* populated by `git clone
+--recurse-submodules`; run `make ecosystem` (or `make <library>`) to check them
+out.  `make ecosystem-test` type-checks them all, `make <library>-test` just one.
+
+See [`ecosystem/README.md`](ecosystem/README.md) for the details.
+
 Testing and documentation
 =========================
 
@@ -324,10 +347,10 @@ Testing and documentation
   `doc/user-manual/` and `CHANGELOG.md`.
 
 * In both cases, you need to add regression tests under `test/Succeed`
-  and `test/Fail`, and maybe also `test/interaction`.
+  and `test/Fail`, and maybe also `test/Interaction`.
     * When adding test cases under `test/Fail`, remember to record the error messages
       (`.err` files) after running make test.
-    * Same for `.warn` files in `test/Succeed` and `.out` files in `test/interaction`.
+    * Same for `.warn` files in `test/Succeed` and `.out` files in `test/Interaction`.
     * You can also add `.flags` files to set Agda options.
     * You can also add `.vars` files to set environment variables (which may reference other environment variables, even those in the file appearing before them).
 
@@ -369,7 +392,7 @@ Testing and documentation
   or in `mk/config.mk`.
 
 * You can run a single interaction test by going into the
-  `test/interaction` directory and typing `make <test name>.cmp`.
+  `test/Interaction` directory and typing `make <test name>.cmp`.
 
 * Additional options for the tests using the Haskell/tasty test runner
   can be given using `AGDA_TESTS_OPTIONS`. By default, the interactive
@@ -561,7 +584,7 @@ They can be enabled by including a special phrase in the commit message
 
 | Phrase | Effect |
 |--------|--------|
-| `[cubical]` | Runs the cubical library tests (adds ~10 minutes) |
+| `[ecosystem]` | Runs the tests of the ecosystem libraries (adds a few workers at ~10 minutes each) |
 
 ### Editing the GitHub Actions
 
@@ -643,7 +666,7 @@ Emacs mode
 ==========
 
 * If you fix a bug related to syntax highlighting, please add a test
-  case under `test/interaction`. Example `.in` file command:
+  case under `test/Interaction`. Example `.in` file command:
 
       IOTCM "Foo.agda" NonInteractive Direct (Cmd_load "Foo.agda" [])
 
@@ -709,7 +732,7 @@ Since: July 2019.
   `M-x agda2-set-program-version RET quicker RET`.
 
 * Running the testsuite requires some tinkering.  E.g., the interactive testsuite
-  can be run via `make -C test/interaction AGDA_BIN=agda-quicker`.
+  can be run via `make -C test/Interaction AGDA_BIN=agda-quicker`.
 
 
 Bisecting: Finding the commit that introduced a regression

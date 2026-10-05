@@ -45,7 +45,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04]
+        os: [ubuntu-26.04]
         description: [Linux]      ## This just for pretty-printing the job name.
         ghc-ver: [9.14.1, 9.12.4, 9.10.3, 9.8.4, 9.6.7, 9.4.8, 9.2.8]
         cabal-flags: ['--enable-tests --flags=enable-cluster-counting']
@@ -53,16 +53,15 @@ jobs:
         include:
           ## Latest GHC, special builds
 
-          # # KEEP this as template for future GHCs that need a specific project file
-          # # Linux, with GHC 9.14.1
-          # - os: ubuntu-24.04
-          #   description: Linux GHC 9.14.1
-          #   ghc-ver: '9.14.1'
-          #   cabal-flags: '--project-file=cabal.project.ghc-9.14.1'
-          #   doctest: false
+          # Linux, with GHC 10.0.0
+          - os: ubuntu-26.04
+            description: Linux GHC 10.0.0 alpha1
+            ghc-ver: '10.0.0.20260917'
+            cabal-flags: '--project-file=cabal.project.ghc-10.0.0'
+            doctest: false
 
           # Linux, without tests but with doctest
-          - os: ubuntu-24.04
+          - os: ubuntu-26.04
             description: Linux doctest
             ghc-ver: '9.14.1'
             # Can't leave cabal-flags empty here lest it becomes the default value.
@@ -70,13 +69,13 @@ jobs:
             doctest: true
 
           # Linux, without -f enable-cluster-counting but with -f debug
-          - os: ubuntu-24.04
+          - os: ubuntu-26.04
             description: Linux debug
             ghc-ver: '9.14.1'
             cabal-flags: '--enable-tests --flags=debug'
 
           # Linux, with all debug options
-          - os: ubuntu-24.04
+          - os: ubuntu-26.04
             description: Linux debug all
             ghc-ver: '9.14.1'
             ## Andreas, 2024-08-16: Keeping the following outdated note for future reference:
@@ -117,6 +116,13 @@ jobs:
     steps:
     - uses: actions/checkout@v7
 
+    # ubuntu-26.04 no longer ships the gold linker by default as it is deprecated,
+    # but GHC <= 9.4 still uses it when linking C libraries.
+    # The easiest work around is to install it here.
+    - name: Install gold linker for GHC 9.2 and 9.4
+      if: runner.os == 'Linux' && (env.GHC_VER == '9.2.8' || env.GHC_VER == '9.4.8')
+      run: sudo apt-get install -y binutils-gold
+
     - name: Switch off XDG directories for cabal (Linux)
       if: runner.os == 'Linux'
       run: |
@@ -129,6 +135,8 @@ jobs:
         ghc-version:   ${{ env.GHC_VER }}
         cabal-version: latest
         cabal-update:  true
+        # "prereleases" is by default registered as release channel
+        # ghcup-release-channel: prereleases
 
     # See: https://github.com/haskell/text-icu/pull/86
     # pacman needs MSYS /usr/bin in PATH, but this breaks the latest cache action.

@@ -8,7 +8,9 @@ on:
     paths: &path_list
     # This workflow:
     - '.github/workflows/wasm.yml'
-    - 'src/github/workflows/wasm.yml'
+    # Andreas, 2026-09-12, don't include the template of this workflow
+    # since it has no effect on the workflow run.
+    # - 'src/github/workflows/wasm.yml'
     # Agda project definition:
     - 'Agda.cabal'
     - 'cabal.project'
@@ -65,7 +67,7 @@ jobs:
       || github.event_name == 'schedule'
       || github.event_name == 'workflow_dispatch'
 
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
 
     steps:
     - uses: styfle/cancel-workflow-action@0.13.1

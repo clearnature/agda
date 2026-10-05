@@ -37,7 +37,7 @@ import Agda.Syntax.Internal.Pattern
 import qualified Agda.Syntax.Abstract as A
 import Agda.Syntax.Abstract.Views (asView, deepUnscope)
 import Agda.Syntax.Concrete (FieldAssignment'(..),LensInScope(..))
-import Agda.Syntax.Common as Common hiding (DataOrRecord)
+import Agda.Syntax.Common hiding (DataOrRecord)
 import qualified Agda.Syntax.Info as A
 import Agda.Syntax.Literal
 import Agda.Syntax.Position
@@ -95,7 +95,7 @@ import Agda.Utils.StrictReader
 import Agda.Utils.StrictWriter
 
 import Agda.Utils.Impossible
-import Agda.TypeChecking.Free (freeIn)
+import Agda.TypeChecking.Free (anyFreeVar, freeIn)
 
 -- | Are we checking the LHS of a let-pattern binding or a function clause?
 data LetOrClause
@@ -162,7 +162,7 @@ instance IsFlexiblePattern a => IsFlexiblePattern [a] where
 instance IsFlexiblePattern a => IsFlexiblePattern (Arg a) where
   maybeFlexiblePattern = maybeFlexiblePattern . unArg
 
-instance IsFlexiblePattern a => IsFlexiblePattern (Common.Named name a) where
+instance IsFlexiblePattern a => IsFlexiblePattern (Named name a) where
   maybeFlexiblePattern = maybeFlexiblePattern . namedThing
 
 -- | Update the given LHS state:
@@ -263,7 +263,7 @@ updateProblemEqs eqs = do
 
             -- In fs omitted explicit fields are replaced by underscores,
             -- and the fields are put in the correct order.
-            ps <- insertMissingFieldsFail ConORec d (const $ A.WildP empty) fs cxs
+            ps <- insertMissingFieldsFail d (const $ A.WildP empty) fs cxs
 
             -- We also need to insert missing implicit or instance fields.
             ps <- insertImplicitPatterns ExpandLast ps ctel
@@ -468,7 +468,7 @@ transferOrigins ps qs = do
         let Def d _  = unEl $ unArg $ fromMaybe __IMPOSSIBLE__ mb
             axs = map' (nameConcrete . qnameName . unArg) (conFields c) `withArgsFrom` qs
             cpi = ConPatternInfo (PatternInfo PatORec asB) r ft mb l prio
-        ps <- insertMissingFieldsFail ConORec d (const $ A.WildP empty) fs axs
+        ps <- insertMissingFieldsFail d (const $ A.WildP empty) fs axs
         ConP c cpi <$> transfers ps qs
 
       ((asB , p) , ConP c (ConPatternInfo i r ft mb l prio) qs) -> do
@@ -1428,7 +1428,7 @@ checkLHS mf = updateModality checkLHS_ where
         A.RecP _ _ fs -> do
           RecordDefn def <- theDef <$> getConstInfo d
           let axs = map' argFromDom $ recordFieldNames def
-          ps <- insertMissingFieldsFail ConORec d (const $ A.WildP empty) fs axs
+          ps <- insertMissingFieldsFail d (const $ A.WildP empty) fs axs
           ps <- insertImplicitPatterns ExpandLast ps gamma
           return $ useNamesFromPattern ps gamma
         _ -> __IMPOSSIBLE__
@@ -1887,17 +1887,31 @@ disambiguateConstructor
   -> QName             -- ^ Name of the datatype.
   -> Args              -- ^ Parameters of the datatype
   -> TCM (ConHead, Type)
-disambiguateConstructor ambC d pars = do
-  d <- canonicalName d
-  cons <- theDef <$> getConstInfo d >>= \case
-    def@Datatype{} -> return $ dataCons def
-    def@Record{}   -> return $ [conName $ recConHead def]
-    _              -> __IMPOSSIBLE__
+disambiguateConstructor ambC d0 pars = do
+  reduce (Def d0 $ map Apply pars) >>= \case
+    Def d es | Just vs <- allApplyElims es -> do
+      def <- theDef <$> getConstInfo d
+      uncurry (disambiguateConstructor' ambC d vs) case def of
+        Datatype{} -> (IsData, dataCons def)
+        Record  {} -> (IsRecord_, [conName $ recConHead def])
+        _ -> __IMPOSSIBLE__
+    _ -> __IMPOSSIBLE__
 
+-- | Disambiguate a constructor based on the data type it is supposed to be
+--   constructing. Returns the unambiguous constructor name and its type.
+--   Precondition: type should be a data/record type.
+disambiguateConstructor'
+  :: AmbiguousQName      -- ^ The name of the constructor to be disambiguated.
+  -> QName               -- ^ Name of the datatype.
+  -> Args                -- ^ Parameters of the datatype
+  -> DataOrRecord_       -- ^ Whether it is really a datatype or rather a record type.
+  -> [QName]             -- ^ The constructor(s) of the data/record type.
+  -> TCM (ConHead, Type)
+disambiguateConstructor' ambC d pars dataOrRec cons = do
   -- First, try do disambiguate with nonConstraining,
   -- if that fails, try again allowing constraint/solution generation.
-  tryDisambiguate False d cons $ \ _ ->
-    tryDisambiguate True d cons $ \case
+  tryDisambiguate False \ _ ->
+    tryDisambiguate True \case
         ([]   , [] ) -> __IMPOSSIBLE__
         (err:_, [] ) -> throwError err
         -- If all disambiguations point to the same original constructor
@@ -1910,18 +1924,17 @@ disambiguateConstructor ambC d pars = do
   where
     cs = getAmbiguous ambC
     tryDisambiguate
-      :: Bool     -- May we constrain/solve metas to arrive at unique disambiguation?
-      -> QName    -- Data/record type.
-      -> [QName]  -- Its constructor(s).
+      :: Bool
+           -- May we constrain/solve metas to arrive at unique disambiguation?
       -> ( ( [TCErr]
            , [List1 (QName, ConHead, (Type, Maybe TCState))]
            )
-           -> TCM (ConHead, Type) )  -- Failure continuation, taking
-                                     -- possible disambiguations
-                                     -- grouped by the original
-                                     -- constructor name in 'ConHead'.
-      -> TCM (ConHead, Type)  -- Unique disambiguation and its type.
-    tryDisambiguate constraintsOk d cons failure = do
+           -> TCM (ConHead, Type) )
+           -- Failure continuation, taking possible disambiguations
+           -- grouped by the original constructor name in 'ConHead'.
+      -> TCM (ConHead, Type)
+           -- Unique disambiguation and its type.
+    tryDisambiguate constraintsOk failure = do
       reportSDoc "tc.lhs.disamb" 30 $ sep $ List.concat $
         [ [ "tryDisambiguate" ]
         , if constraintsOk then [ "(allowing new constraints)" ] else empty
@@ -1929,7 +1942,7 @@ disambiguateConstructor ambC d pars = do
         , [ "against" ]
         , map' (nest 2 . pretty) cons
         ]
-      disambiguations <- mapM (runExceptT . tryCon constraintsOk cons d pars) cs
+      disambiguations <- mapM (runExceptT . tryCon constraintsOk) cs
       -- Q: can we be more lazy, like using the ListT monad?
       -- Andreas, 2020-06-17: Not really, since we need to make sure
       -- that only a single candidate remains, and if not,
@@ -1965,26 +1978,23 @@ disambiguateConstructor ambC d pars = do
     abstractConstructor c = softTypeError $
       AbstractConstructorNotInScope c
 
-    wrongDatatype c d = softTypeError $
-      ConstructorPatternInWrongDatatype c d
+    wrongDatatype c = softTypeError $
+      ConstructorPatternInWrongDatatype c d dataOrRec
 
     tryCon
       :: Bool        -- Are we allowed to constrain metas?
-      -> [QName]     -- Constructors of data type under consideration.
-      -> QName       -- Name of data/record type we are eliminating.
-      -> Args        -- Parameters of data/record type we are eliminating.
       -> QName       -- Candidate constructor.
       -> ExceptT TCErr TCM (QName, ConHead, (Type, Maybe TCState))
            -- If this candidate succeeds, return its disambiguation
            -- its type, and maybe the state obtained after checking it
            -- (which may contain new constraints/solutions).
-    tryCon constraintsOk cons d pars c = getConstInfo' c >>= \case
+    tryCon constraintsOk c = getConstInfo' c >>= \case
       Left (SigUnknown err)     -> __IMPOSSIBLE_VERBOSE__ err
       Left SigCubicalNotErasure -> __IMPOSSIBLE__
       Left SigAbstract          -> abstractConstructor c
       Right def                 -> do
         let con = conSrcCon (theDef def) `withRangeOf` c
-        unless (conName con `elem` cons) $ wrongDatatype c d
+        unless (conName con `elem` cons) $ wrongDatatype c
 
         -- Andreas, 2013-03-22 fixing issue 279
         -- To resolve ambiguous constructors, Agda always looks up
@@ -2057,30 +2067,65 @@ checkConstructorParameters c d pars = do
   checkParameters dc d pars
 
 -- | Check that given parameters match the parameters of the inferred
---   constructor/projection.
+--   constructor or projection.
 checkParameters
   :: MonadTCM tcm
-  => QName  -- ^ The record/data type name of the chosen constructor/projection.
-  -> QName  -- ^ The record/data type name as supplied by the type signature.
+  => QName  -- ^ The record or data type name of the chosen constructor or projection.
+  -> QName  -- ^ The record or data type name as supplied by the type signature.
   -> Args   -- ^ The parameters.
   -> tcm ()
 checkParameters dc d pars = liftTCM $ do
-  a  <- reduce (Def dc [])
-  case a of
-    Def d0 es -> do -- compare parameters
-      let vs = mustAllApplyElims es
-      reportSDoc "tc.lhs.split" 40 $ vcat $
-        [ "checkParameters"
-        , nest 2 $ "d                   =" <+> (text . prettyShow) d
-        , nest 2 $ "d0 (should be == d) =" <+> (text . prettyShow) d0
-        , nest 2 $ "dc                  =" <+> (text . prettyShow) dc
-        , nest 2 $ "vs                  =" <+> prettyTCM vs
-        , nest 2 $ "pars                =" <+> prettyTCM pars
-        ]
-      -- when (d0 /= d) __IMPOSSIBLE__ -- d could have extra qualification
-      t <- typeOfConst d
-      compareArgs [] [] t (Def d []) vs (take' (length vs) pars)
-    _ -> __IMPOSSIBLE__
+  def <- getConstInfo dc
+  -- Only a copy stemming from a module instantiation can have parameters
+  -- that are already fixed; for anything else there is nothing to check.
+  -- (This also avoids the context churn below in the common case.)
+  when (defCopy def) $ do
+    -- Andreas, 2026-09-25, issue #7664:
+    -- Saturate @dc@ with fresh parameters before reducing.
+    -- Reducing @Def dc []@ is not enough: a copy does unfold when underapplied
+    -- (issue #8545), but reduction stops at the leading lambdas it produces,
+    -- so a /chain/ of copies would not be unfolded all the way down to @d@.
+    TelV tel _ <- telView $ defType def
+    let n = size tel
+    addContext tel $ do
+      a <- reduce $ Def dc $ map Apply $ teleArgs tel
+      case a of
+        Def d0 es -> do
+          let pars' = raise n pars
+              vs0   = mustAllApplyElims es
+              -- Andreas, 2026-09-25, issue #7664:
+              -- A parameter of @d@ that still mentions one of the fresh
+              -- variables is not fixed by the module instantiation: the caller
+              -- may choose it freely, but consistently.
+              -- To ensure consistency of the choices, we would need full-blown
+              -- unification.  We abstain from implementing this here.
+              -- Rather, we simply overwrite the constructor parameters
+              -- that still contain fresh variables with the respective
+              -- data parameter so that the subsequent 'compareArgs'
+              -- never fails at these positions.
+              -- This means that 'checkParameters' still lets through
+              -- some constructors with the wrong parameter instantiation.
+              -- That we actually need to jump through hoops here lies in
+              -- our handling of module applications that do not make
+              -- proper copies of the module, but just fake them using 'defCopy'.
+              vs | n == 0    = vs0  -- Nothing supplied by us, nothing to neutralize.
+                 | otherwise = zipWith (\ v p -> if anyFreeVar (< n) v then p else v)
+                                 vs0 pars'
+          reportSDoc "tc.lhs.split" 40 $ vcat $
+            [ "checkParameters"
+            , nest 2 $ "d                   =" <+> (text . prettyShow) d
+            , nest 2 $ "d0 (should be == d) =" <+> (text . prettyShow) d0
+            , nest 2 $ "dc                  =" <+> (text . prettyShow) dc
+            , nest 2 $ "vs0                 =" <+> prettyTCM vs0
+            , nest 2 $ "vs                  =" <+> prettyTCM vs
+            , nest 2 $ "pars                =" <+> prettyTCM pars
+            ]
+          unless (d0 == d) __IMPOSSIBLE__
+          -- @pars@ include the module parameters of @d@,
+          -- so we need the uninstantiated type of @d@ here (not @typeOfConst d@).
+          t <- defType <$> getConstInfo d
+          compareArgs [] [] t (Def d []) vs (take' (length vs) pars')
+        _ -> return ()
 
 checkSortOfSplitVar :: (MonadTCM m, PureTCM m, MonadError TCErr m,
                         LensSort a, PrettyTCM a, LensSort ty, PrettyTCM ty)

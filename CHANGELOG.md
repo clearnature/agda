@@ -8,6 +8,10 @@ Installation
 
 * Agda supports GHC versions 9.2.8 to 9.14.1.
 
+* The new Cabal flag `version-with-git-hash` controls whether version information
+  is suffixed with the Git commit hash. It is disabled by default for cabal
+  but enabled by default when using the Makefile.
+
 Pragmas and options
 -------------------
 
@@ -157,6 +161,89 @@ Pragmas and options
 * New options `--irrelevance` (default on) and `--no-irrelevance` to allow or
   disallow the irrelevance modality.
 
+* (**BREAKING**.) Now `--erased-matches` takes an optional argument:
+
+  * `--erased-matches=none`: Do not enable any erased matches (this
+       can be overridden).
+
+  * `--erased-matches=empty`: Enable erased matches for empty types.
+
+  * `--erased-matches=non-dependent`: Enable erased matches for
+    non-indexed, single-constructor types.
+
+  * `--erased-matches=restricted`: Make it possible to import the
+    module `Agda.Builtin.Erased.Box-cong`, which contains an
+    implementation of `[]-cong` (the type `Erased` can be found in
+    `Agda.Builtin.Erased.Erased`):
+
+    ```agda
+    record Erased (@0 A : Set a) : Set a where
+      no-eta-equality
+      constructor [_]
+      field
+        @0 erased : A
+
+    []-cong : @0 x ≡ y → [ x ] ≡ [ y ]
+    []-cong refl = refl
+    ```
+
+    In the future `--erased-matches=restricted` might make it possible
+    to implement `[]-cong` in user code, but that is currently not
+    allowed.
+
+  * `--erased-matches=unrestricted`: Enable unrestricted erased
+    matches for single-constructor types. If `--safe` is active, then
+    this option is not allowed together with `--without-K`.
+
+  One can also use comma-separated lists of options, for instance
+  `--erased-matches=empty,restricted`. This has the same effect as
+  giving the options separately (`--erased-matches=empty
+  --erased-matches=restricted`). There is no way to turn off something
+  that has been enabled, so it does not matter in what order the
+  options are given. As an example, `--erased-matches=empty,none`
+  means the same thing as `--erased-matches=empty`.
+
+  If none of these options are given, then Agda behaves
+
+  * as if `--erased-matches=none` had been used if `--erasure` is not
+    turned on (directly or indirectly), otherwise
+
+  * as if `--erased-matches=empty` had been used if `--without-K` is
+    active, and otherwise
+
+  * as if `--erased-matches=empty,unrestricted` had been used.
+
+  Note that these defaults can be overridden by, for instance,
+  `--erased-matches=none`.
+
+  The option `--erased-matches` means almost the same thing as
+  `--erased-matches=empty,non-dependent` if `--without-K` is active,
+  and otherwise it means almost the same thing as
+  `--erased-matches=empty,unrestricted`. However, any use of
+  `--erased-matches` with explicit arguments takes precedence over
+  `--erased-matches` without arguments. For instance,
+  `--erased-matches=none --erased-matches` means the same thing as
+  `--erased-matches=none`.
+
+  The option `--no-erased-matches` is now a synonym for
+  `--erased-matches=none`.
+
+  All variants of `--erased-matches` except for
+  `--erased-matches=none` enable `--erasure`.
+
+  This change can lead to some breakage:
+
+  * Previously `--no-erased-matches --erased-matches` meant the same
+    thing as `--erased-matches`, now it means the same thing as
+    `--erased-matches=none`.
+
+  * Before `--with-K` overrode a previously given
+    `--no-erased-matches` and turned on erased matches. That is no
+    longer the case.
+
+  Note that the new optional argument to `--erased-matches` is
+  experimental: the design might change in the future.
+
 * The new (experimental and possibly unstable) options
   `--erased-funext`, `--erased-propext` and `--erased-quotients`
   enable use of `Agda.Builtin.Erased.Funext`,
@@ -167,15 +254,21 @@ Pragmas and options
   `--erased-funext`.
 
   These modules contain erased postulates. The idea is that it should
-  be safe to use these postulates (in the absence of any Agda bugs):
+  be safe to use these postulates (under `--safe` and in the absence
+  of any Agda bugs):
 
-  * If `--erased-matches` is not used, then canonicity should hold for
-    non-erased terms (if all opaque definitions are made transparent,
-    the context only contains erased assumptions, and the context plus
-    the postulates are jointly consistent).
+  * If `--erased-matches=X` is not used, where `X` is one of `empty`,
+    `non-dependent`, `restricted` and `unrestricted`, then canonicity
+    should hold for non-erased terms (if all opaque definitions are
+    made transparent and the context only contains erased
+    assumptions).
 
-  * If `--erased-matches` is used, then reduction might get stuck, but
-    compiled programs should still run correctly.
+  * If `--erased-matches=empty` is used, then canonicity should still
+    hold if the context plus the postulates are jointly consistent.
+
+  * If `--erased-matches=X` is used, where `X` is one of
+    `non-dependent`, `restricted` and `unrestricted`, then reduction
+    might get stuck, but compiled programs should still run correctly.
 
   `Agda.Builtin.Erased.Funext` postulates function extensionality,
   `Agda.Builtin.Erased.Propext` postulates propositional
@@ -215,11 +308,15 @@ Errors
 Warnings
 --------
 
-* New warning `UnusedImports` when `open` brings identifiers into scope
+* New warning `UnusedImports` when `open` brings identifiers or modules into scope
   that are definitely not used subsequently.
+  A module counts as used if it is referred to,
+  e.g. in a qualified name `M.x`, in `open M`, or in `module N = M`.
 
   If `using` or `renaming` directives are given, or in flavor `-WUnusedImports=all`,
-  Agda warns about each name that is unused.
+  Agda warns about each name and module that is unused,
+  except for modules of data and record types that are not mentioned
+  explicitly in the directive.
   If no directive or only a `hiding` directive is given,
   and unless the flavor is `all`,
   Agda only warns if none of the imported names are used.
@@ -300,6 +397,28 @@ Warnings
 
   Pattern matching on left hand sides of function definitions does not trigger the warning.
 
+* New warning `FixityDeclarationForNonOperator` when a fixity declaration is attached to a name
+  that is neither a pre-, post-, nor infix operator and neither has a pre-, post- or infix `syntax`
+  attached to it.
+  ```agda
+  infixl 10 plus                     -- warning
+  plus : ℕ → ℕ → ℕ
+  plus = ...
+
+  infix 42 [_]                       -- warning
+  [_] : A → List A
+  [_] = ...
+
+  infix 255 abs
+  syntax abs x = | x |               -- warning
+
+  infix 314 neg                      -- no warning
+  syntax neg x = ¬ x
+
+  open import Agda.Builtin.Nat
+    renaming (_+_ to infixl 10 add)  -- warning
+  ```
+
 Syntax
 ------
 
@@ -309,19 +428,6 @@ Changes to the Agda syntax.
   are closed by a Unicode delimiter, and vice-versa. Concretely, this
   means the mismatched pairs `⦃ ... }}`/`{{ ...  ⦄` and
   `⦇ … |)`/`(| … ⦈` are now parse errors.
-
-
-* Records can now be created using module-like syntax in place of curly braces
-  and semicolons.
-
-  ```agda
-  p : Pair Nat Nat
-  p = record where
-    fst = 2
-    snd = 3
-  ```
-
-  See [#4275](https://github.com/agda/agda/issues/4275) for the proposal.
 
 * Modality annotations in aliases and let-bindings are now supported
   (PR [#7990](https://github.com/agda/agda/pull/7990)).
@@ -554,6 +660,22 @@ Changes to type checker and other components defining the Agda language.
   fields for any cohesion modality which has a left adjoint (currently
   just sharp and continuous).
 
+Builtins
+--------
+
+* (**BREAKING**): The fixity declarations for `Agda.Builtin.Int.pos` and for
+  `primINeg`, `primIMin`, and `primIMax`, in `Agda.Primitive.Cubical` have been removed.
+  Reason: they trigger the new warning `FixityDeclarationForNonOperator`.
+  If you want to use these builtins as operators, supply a fixity in the `renaming` directive, e.g.:
+  ```agda
+  open import Agda.Builtin.Int renaming (pos to infix 8 +_)
+  open import Agda.Primitive.Cubical renaming
+    ( primINeg to infix  30 ~_
+    ; primIMin to infixr 20 _∧_
+    ; primIMax to infixr 20 _∨_
+    )
+  ```
+
 Reflection
 ----------
 
@@ -588,6 +710,13 @@ Interaction and emacs mode
   - `Mimer` responses now include the `interactionPoint` the solution
     refers to.
 
+* Proof search (Mimer, `C-c C-a` in Emacs) now also uses functions
+  defined in the same `mutual` block as the function being defined,
+  without having to give them as hints.
+  As for recursive calls to the function itself, they are only applied
+  to structurally smaller arguments
+  (Issue [#8783](https://github.com/agda/agda/issues/8783)).
+
 * Syntax highlighting and go-to-definition now also works in the Agda
   information and debug buffers in Emacs where goals etc. are displayed.
   This fixes long-standing [Issue #706](https://github.com/agda/agda/issues/706).
@@ -610,6 +739,27 @@ Interaction and emacs mode
   Here, `id {A.l} {A} x = ?` was produced, triggering an error.
   Now, the correct `id {A = A} x = ?` is produced
   (Issue [#8153](https://github.com/agda/agda/issue/8153)).
+
+* The implicit (hidden and instance) fields of a record pattern are
+  no longer printed by default.
+  They are only printed with option `--show-implicit`
+  (`C-c C-x C-h` in Emacs), or if the user wrote them in the first place.
+  For instance, case splitting on `x` in
+  ```agda
+    record R : Set where
+      field
+        {n} : Nat
+        rf  : n ≡ n
+
+    f : R → Set
+    f x = {!x!}  -- C-c C-c x
+  ```
+  now produces `f record { rf = rf } = ?` instead of
+  `f record { n = n ; rf = rf } = ?`.
+  This conforms the treatment of record patterns to the
+  situation where the record type has a constructor, in which case the
+  hidden arguments were already omitted
+  (Issue [#8787](https://github.com/agda/agda/issue/8787)).
 
 * Catch-all copattern clauses are now tolerated as unreachable clauses
   rather than being outright rejected with a `CosplitCatchall` error.
@@ -669,6 +819,11 @@ Backends
 
 * The JS backend's CJS & AMD module styles are now deprecated.
   Please use ES6 module style instead (`--js-es6`).
+
+* The JS backend now compiles constructors to string-tagged arrays.
+  This change is **breaking** for hand-written JS code relying on the previous Scott-Encoding.
+  Constructors for types with `COMPILE JS` pragmas are not affected.
+  (see [#8720](https://github.com/agda/agda/pull/8720))
 
 Issues closed
 -------------
