@@ -1010,7 +1010,12 @@ infectiveCoinfectiveOptions =
   , infectiveOption optIrrelevance            "--irrelevance"
   , infectiveOption optProp                   "--prop"
   , infectiveOption optTwoLevel               "--two-level"
-  , infectiveOption optRewriting              "--rewriting"
+  -- PGM A-1（实验）: 当前模块若显式启用 --local-rewriting，即视为声明「规则只在本地使用」，
+  -- 不再强求它同时启用 --rewriting。设计见 dype docs/theory/PGM-P2-design.md §8.2 路径①。
+  , (infectiveOption optRewriting              "--rewriting")
+      { icOptionOK = \current imported ->
+          not (optRewriting imported) || optRewriting current || optLocalRewriting current
+      }
   , infectiveOption optLocalRewriting         "--local-rewriting"
   , infectiveOption optSizedTypes             "--sized-types"
   , infectiveOption optGuardedness            "--guardedness"
