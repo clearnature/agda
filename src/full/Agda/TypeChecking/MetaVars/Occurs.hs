@@ -56,7 +56,7 @@ import Agda.TypeChecking.Substitute
 import Agda.TypeChecking.Datatypes
 import Agda.TypeChecking.Records
 import {-# SOURCE #-} Agda.TypeChecking.MetaVars
-import Agda.Interaction.Options (optFirstOrder, optErasure)
+import Agda.Interaction.Options (optFirstOrder, optErasure, optExperimentalIrrelevance)
 
 import Agda.Utils.Either
 import Agda.Utils.Function
@@ -476,6 +476,36 @@ underRelevance o = local \e -> divideVars (setRelevance r unitModality) $
 underQuantity :: (LensQuantity o) => o -> OccursM a -> OccursM a
 underQuantity = local . mapQuantity . composeQuantity . getQuantity
 
+-- | Going into the sort annotation @s@ of a type @El s t@.
+--
+--   Issue #8811.
+--   The type checker infers @s@ from @t@ rather than checking it,
+--   so @s@ should be subject to no more modality restrictions than @t@
+--   is when checked by 'workOnTypes':
+--   it is erased (its metas are created with quantity 0 by 'workOnTypes'),
+--   has unused polarity, and, with @--experimental-irrelevance@,
+--   it is shape-irrelevant and irrelevant variables become
+--   shape-irrelevant.
+--
+--   Issue #8823.
+--   We must not treat @s@ as irrelevant: in irrelevant positions,
+--   the occurs check does not reduce, so it misses the blockers
+--   of offending occurrences, and postponed assignments are not retried.
+{-# INLINE underSortAnnotation #-}
+underSortAnnotation :: OccursM a -> OccursM a
+underSortAnnotation cont = do
+  experimental <- optExperimentalIrrelevance <$> pragmaOptions
+  underQuantity zeroQuantity
+    . applyWhen experimental (local wakeIrrelevantVars . underRelevance shapeIrrelevant)
+    . local (divideVars $ setModalPolarity (withStandardLock UnusedPolarity) unitModality)
+    $ cont
+  where
+    -- Make irrelevant variables shape-irrelevant, as 'workOnTypes' does.
+    wakeIrrelevantVars e = e
+      { occVars            = mapVarMap (fmap $ mapRelevance irrelevantToShapeIrrelevant) (occVars e)
+      , occLocalModalities = map (mapRelevance irrelevantToShapeIrrelevant) (occLocalModalities e)
+      }
+
 -- | Check whether a free variable is allowed in the context as
 --   specified by the modality.
 variableCheck :: Int -> OccursM Bool
@@ -701,7 +731,7 @@ instance Occurs PlusLevel where
   metaOccurs m (Plus n l) = metaOccurs m l
 
 instance Occurs Type where
-  occurs (El s v) = El <$> occurs_ s <*> occurs v
+  occurs (El s v) = El <$> underSortAnnotation (occurs_ s) <*> occurs v
 
   metaOccurs m (El s v) = metaOccurs2 m s v
 

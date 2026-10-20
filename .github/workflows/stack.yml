@@ -28,6 +28,9 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
     - uses: actions/checkout@v7
+    - if: runner.os == 'macOS'
+      name: Work around https://github.com/actions/runner-images/issues/14940
+      run: sudo xcode-select -s /Library/Developer/CommandLineTools
     - if: runner.os == 'Linux' && (matrix.ghc-ver == '9.2.8' || matrix.ghc-ver ==
         '9.4.8')
       name: Install gold linker for GHC 9.2 and 9.4
@@ -38,7 +41,6 @@ jobs:
         cabal-update: false
         enable-stack: true
         ghc-version: ${{ matrix.ghc-ver }}
-        stack-version: 3.9.3
     - name: Environment settings based on the Haskell setup
       run: |
         echo "runner.os         = ${{ runner.os                               }}"
@@ -67,7 +69,7 @@ jobs:
       name: Install the ICU library (Windows)
       run: |
         # shellcheck disable=SC2086
-        stack exec ${ARGS} -- pacman --noconfirm -S mingw-w64-x86_64-icu mingw-w64-x86_64-pkgconf mingw-w64-x86_64-zlib
+        stack exec ${ARGS} -- pacman --noconfirm -S mingw-w64-clang-x86_64-icu mingw-w64-clang-x86_64-pkgconf mingw-w64-clang-x86_64-zlib
     - name: Determine the ICU version
       run: |
         # shellcheck disable=SC2086

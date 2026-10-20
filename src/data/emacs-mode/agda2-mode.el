@@ -1099,7 +1099,7 @@ The buffer is returned.")
       (compilation-mode ,name-of-mode)
       ;; Support for jumping to positions mentioned in the text.
       (set (make-local-variable 'compilation-error-regexp-alist)
-           '(("\\([\\\\/][^[:space:]]*\\):\\([0-9]+\\)\\.\\([0-9]+\\)\\(-\\(\\([0-9]+\\)\\.\\)?\\([0-9]+\\)\\)?"
+           '(("^\\([\\\\/][^[:space:]]*\\):\\([0-9]+\\)\\.\\([0-9]+\\)\\(-\\(\\([0-9]+\\)\\.\\)?\\([0-9]+\\)\\)?"
               1 (2 . 6) (3 . 7))))
 
       ;; compilation-mode adds font-lock keywords for highlighting
@@ -2353,7 +2353,8 @@ If there is no buffer visiting FILE, do nothing."
           ;; Buffer exists, but is not visible.
           ;; We do not display the buffer here, as can be jarring for slow loads.
           ;; See https://github.com/agda/agda/pull/8458#issuecomment-4032442448
-          (goto-char (cdr filepos))))))
+          (with-current-buffer buffer
+            (goto-char (cdr filepos)))))))
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;; Implicit arguments

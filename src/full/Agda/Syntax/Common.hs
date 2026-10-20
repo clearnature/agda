@@ -417,6 +417,23 @@ instance CopatternMatchingAllowed DataOrRecord where
 -- * Induction
 ---------------------------------------------------------------------------
 
+-- | Does a datatype have path constructors, i.e. is it a HIT?
+data IsHIT = YesHIT | NotHIT
+  deriving (Eq, Ord, Show, Generic)
+
+instance Boolean IsHIT where
+  fromBool True  = YesHIT
+  fromBool False = NotHIT
+
+instance IsBool IsHIT where
+  toBool YesHIT = True
+  toBool NotHIT = False
+
+instance KillRange IsHIT where
+  killRange = id
+
+instance NFData IsHIT
+
 instance Pretty Induction where
   pretty Inductive   = "inductive"
   pretty CoInductive = "coinductive"
@@ -848,10 +865,11 @@ defaultModality = Modality defaultRelevance defaultQuantity defaultCohesion defa
 defaultCheckModality :: Modality
 defaultCheckModality = defaultModality { modPolarity = withStandardLock StrictlyPositive }
 
--- | Extract the positional modality component for checks regarding only them.
+-- | Extract the positional modality components (cohesion and polarity)
+--   for checks regarding only them.
 positionalModalityComponent :: Modality -> Modality
 positionalModalityComponent m =
-  defaultModality {modCohesion = modCohesion m}
+  defaultModality {modCohesion = modCohesion m, modPolarity = modPolarity m}
 
 -- | Equality ignoring origin.
 
