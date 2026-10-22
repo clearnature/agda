@@ -88,7 +88,6 @@ checkEmptyType range t0 = do
           ps    = teleNamedArgs tel
 
       dontAssignMetas $ do
-        tel <- instantiateFull tel
         r <- splitLast Inductive tel ps
         case r of
           Left UnificationStuck{} -> do
